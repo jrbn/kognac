@@ -1,0 +1,11 @@
+This product includes software developed at The Apache Software Foundation (http://www.apache.org/).
+
+The copyright of all the source code is the directories "src" and "include" is of Jacopo Urbani, except of:
+
+- The files MisraGries.h and MisraGries.cpp, whose copyright is of Sourav Dutta
+- The files murmurhash3.h and murmurhash3.cpp, which were written by 
+  Austin Appleby and placed in the public domain.
+
+This product uses the library Boost, available at http://boost.org
+
+This product uses the library LibLZ4, available at https://github.com/Cyan4973/lz4
