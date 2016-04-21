@@ -2829,9 +2829,11 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
         BOOST_LOG_TRIVIAL(error) << "The current version of the code supports only one dictionary partition";
         throw 10;
     }
-    mergeNotPopularEntries(&filesToBeMerged[0], dictionaries[0],
-                           notSoUncommonFiles[0], uncommonFiles[0], &counters[0], ndicts,
-                           parallelProcesses);
+    if (!filesToBeMerged[0].empty()) {
+        mergeNotPopularEntries(&filesToBeMerged[0], dictionaries[0],
+                               notSoUncommonFiles[0], uncommonFiles[0], &counters[0], ndicts,
+                               parallelProcesses);
+    }
     /*for (int i = 1; i < ndicts; ++i) {
         threads[i - 1].join();
     }
