@@ -1648,6 +1648,10 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     } else {
         maxSize = nBytesInput / 25;
     }
+    // Fix: maxSize = 0 for very small inputs
+    if (maxSize <= 16) {
+	maxSize = 16;
+    }
     BOOST_LOG_TRIVIAL(debug) << "Size Input: " << nBytesInput <<
                              " bytes. Max table size=" << maxSize;
     long memForHashTables = (long)(Utils::getSystemMemory() * 0.6)
@@ -2829,9 +2833,11 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
         BOOST_LOG_TRIVIAL(error) << "The current version of the code supports only one dictionary partition";
         throw 10;
     }
-    mergeNotPopularEntries(&filesToBeMerged[0], dictionaries[0],
-                           notSoUncommonFiles[0], uncommonFiles[0], &counters[0], ndicts,
-                           parallelProcesses);
+    if (filesToBeMerged[0].size() > 0) {
+	mergeNotPopularEntries(&filesToBeMerged[0], dictionaries[0],
+			       notSoUncommonFiles[0], uncommonFiles[0], &counters[0], ndicts,
+			       parallelProcesses);
+    }
     /*for (int i = 1; i < ndicts; ++i) {
         threads[i - 1].join();
     }
