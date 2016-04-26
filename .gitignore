@@ -2,3 +2,4 @@
 build/
 build_debug/
 .DS_Store
+private
