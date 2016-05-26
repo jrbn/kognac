@@ -30,6 +30,8 @@
 #include <kognac/hashmap.h>
 #include <kognac/factory.h>
 
+#include <kognac/diskreader.h>
+
 #ifdef COUNTSKETCH
 #include <kognac/CountSketch.h>
 #endif
@@ -87,7 +89,8 @@ struct ParamsNewCompressProcedure {
 };
 
 struct ParamsUncompressTriples {
-    vector<FileInfo> files;
+    //vector<FileInfo> files;
+    DiskReader *reader;
     Hashtable *table1;
     Hashtable *table2;
     Hashtable *table3;

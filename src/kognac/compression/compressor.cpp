@@ -118,7 +118,8 @@ void Compressor::parsePermutationSignature(int signature, int *output) {
 }
 
 void Compressor::uncompressTriples(ParamsUncompressTriples params) {
-    vector<FileInfo> &files = params.files;
+    //vector<FileInfo> &files = params.files;
+    DiskReader *filesreader = params.reader;
     Hashtable *table1 = params.table1;
     Hashtable *table2 = params.table2;
     Hashtable *table3 = params.table3;
@@ -147,8 +148,11 @@ void Compressor::uncompressTriples(ParamsUncompressTriples params) {
 
     FlajoletMartin estimator;
 
-    for (int i = 0; i < files.size(); ++i) {
-        FileReader reader(files[i]);
+    size_t sizebuffer = 0;
+    bool gzipped = false;
+    char *buffer = filesreader->getfile(sizebuffer, gzipped);
+    while (buffer != NULL) {
+        FileReader reader(buffer, sizebuffer, gzipped);
         while (reader.parseTriple()) {
             if (reader.isTripleValid()) {
                 count++;
@@ -225,6 +229,9 @@ void Compressor::uncompressTriples(ParamsUncompressTriples params) {
                 countNotValid++;
             }
         }
+        //Get next file
+        filesreader->releasefile(buffer);
+        buffer = filesreader->getfile(sizebuffer, gzipped);
     }
 
     *distinctValues = estimator.estimateCardinality();
@@ -1453,7 +1460,7 @@ void Compressor::parse(int dictPartitions, int sampleMethod, int sampleArg,
                        bool copyHashes, SchemaExtractor *schemaExtrator,
                        const bool splitUncommonByHash, bool onlySample) {
     tmpFileNames = new string[parallelProcesses];
-    vector<FileInfo> *files = splitInputInChunks(input, parallelProcesses);
+    vector<FileInfo> *files = splitInputInChunks(input, maxReadingThreads);
 
     /*** Set name dictionary files ***/
     dictFileNames = new string*[parallelProcesses];
@@ -1650,87 +1657,88 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     }
     BOOST_LOG_TRIVIAL(debug) << "Size Input: " << nBytesInput <<
                              " bytes. Max table size=" << maxSize;
-    long memForHashTables = (long)(Utils::getSystemMemory() * 0.6)
-                            / (1 + maxReadingThreads) / 3;
+    long memForHashTables = (long)(Utils::getSystemMemory() * 0.5)
+                            / (1 + parallelProcesses) / 3;
     //Divided numer hash tables
     const unsigned int sizeHashTable = std::min((long)maxSize,
                                        (long)std::max((unsigned int)1000000,
                                                (unsigned int)(memForHashTables / sizeof(long))));
     BOOST_LOG_TRIVIAL(debug) << "Size hash table " << sizeHashTable;
 
-    int chunksToProcess = 0;
+    DiskReader **readers = new DiskReader*[maxReadingThreads];
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        readers[i] = new DiskReader(max(1, (int)(parallelProcesses / maxReadingThreads)), &files[i]);
+    }
 
     ParamsUncompressTriples params;
     //Set only global params
     params.sizeHeap = sampleArg;
 
-    while (chunksToProcess < parallelProcesses) {
-        for (int i = 1;
-                i < maxReadingThreads
-                && (chunksToProcess + i) < parallelProcesses;
-                ++i) {
-            tables1[chunksToProcess + i] = new Hashtable(sizeHashTable,
-                    &Hashes::dbj2s_56);
-            tables2[chunksToProcess + i] = new Hashtable(sizeHashTable,
-                    &Hashes::fnv1a_56);
-            tables3[chunksToProcess + i] = new Hashtable(sizeHashTable,
-                    &Hashes::murmur3_56);
-            tmpFileNames[chunksToProcess + i] = kbPath + string("/tmp-")
-                                                + boost::lexical_cast<string>(
-                                                    chunksToProcess + i);
+    for (int i = 1; i < parallelProcesses; ++i) {
+        tables1[i] = new Hashtable(sizeHashTable,
+                                   &Hashes::dbj2s_56);
+        tables2[i] = new Hashtable(sizeHashTable,
+                                   &Hashes::fnv1a_56);
+        tables3[i] = new Hashtable(sizeHashTable,
+                                   &Hashes::murmur3_56);
+        tmpFileNames[i] = kbPath + string("/tmp-")
+                          + boost::lexical_cast<string>(i);
 
-            params.files = files[chunksToProcess + i];
-            params.table1 = tables1[chunksToProcess + i];
-            params.table2 = tables2[chunksToProcess + i];
-            params.table3 = tables3[chunksToProcess + i];
-            params.outFile = tmpFileNames[chunksToProcess + i];
-            params.extractor = copyHashes ? extractors + i : NULL;
-            params.distinctValues = distinctValues + i + chunksToProcess;
-            params.resultsMGS = usemisgra ? &resultsMGS[chunksToProcess + i] : NULL;
-            threads[i - 1] = boost::thread(
-                                 boost::bind(&Compressor::uncompressTriples, this,
-                                             params));
-        }
-        tables1[chunksToProcess] = new Hashtable(sizeHashTable,
-                &Hashes::dbj2s_56);
-        tables2[chunksToProcess] = new Hashtable(sizeHashTable,
-                &Hashes::fnv1a_56);
-        tables3[chunksToProcess] = new Hashtable(sizeHashTable,
-                &Hashes::murmur3_56);
-        tmpFileNames[chunksToProcess] = kbPath + string("/tmp-")
-                                        + to_string(chunksToProcess);
 
-        params.files = files[chunksToProcess];
-        params.table1 = tables1[chunksToProcess];
-        params.table2 = tables2[chunksToProcess];
-        params.table3 = tables3[chunksToProcess];
-        params.outFile = tmpFileNames[chunksToProcess];
-        params.extractor = copyHashes ? extractors : NULL;
-        params.distinctValues = distinctValues + chunksToProcess;
-        params.resultsMGS = usemisgra ? &resultsMGS[chunksToProcess] : NULL;
-        uncompressTriples(params);
-
-        for (int i = 1; i < maxReadingThreads; ++i) {
-            threads[i - 1].join();
-        }
-
-        //Merging the tables
-        BOOST_LOG_TRIVIAL(debug) << "Merging the tables...";
-
-        for (int i = 0; i < maxReadingThreads; ++i) {
-            if ((chunksToProcess + i) != 0) {
-                BOOST_LOG_TRIVIAL(debug) << "Merge table " << (chunksToProcess + i);
-                tables1[0]->merge(tables1[chunksToProcess + i]);
-                tables2[0]->merge(tables2[chunksToProcess + i]);
-                tables3[0]->merge(tables3[chunksToProcess + i]);
-                delete tables1[chunksToProcess + i];
-                delete tables2[chunksToProcess + i];
-                delete tables3[chunksToProcess + i];
-            }
-        }
-
-        chunksToProcess += maxReadingThreads;
+        //params.files = files[i];
+        params.reader = readers[i % maxReadingThreads];
+        params.table1 = tables1[i];
+        params.table2 = tables2[i];
+        params.table3 = tables3[i];
+        params.outFile = tmpFileNames[i];
+        params.extractor = copyHashes ? extractors + i : NULL;
+        params.distinctValues = distinctValues + i;
+        params.resultsMGS = usemisgra ? &resultsMGS[i] : NULL;
+        threads[i - 1] = boost::thread(
+                             boost::bind(&Compressor::uncompressTriples, this,
+                                         params));
     }
+    tables1[0] = new Hashtable(sizeHashTable,
+                               &Hashes::dbj2s_56);
+    tables2[0] = new Hashtable(sizeHashTable,
+                               &Hashes::fnv1a_56);
+    tables3[0] = new Hashtable(sizeHashTable,
+                               &Hashes::murmur3_56);
+    tmpFileNames[0] = kbPath + string("/tmp-") + to_string(0);
+
+    //params.files = files[0];
+    params.reader = readers[0];
+    params.table1 = tables1[0];
+    params.table2 = tables2[0];
+    params.table3 = tables3[0];
+    params.outFile = tmpFileNames[0];
+    params.extractor = copyHashes ? extractors : NULL;
+    params.distinctValues = distinctValues;
+    params.resultsMGS = usemisgra ? &resultsMGS[0] : NULL;
+    uncompressTriples(params);
+
+    for (int i = 1; i < parallelProcesses; ++i) {
+        threads[i - 1].join();
+    }
+
+    //Merging the tables
+    BOOST_LOG_TRIVIAL(debug) << "Merging the tables...";
+
+    for (int i = 0; i < parallelProcesses; ++i) {
+        if (i != 0) {
+            BOOST_LOG_TRIVIAL(debug) << "Merge table " << (i);
+            tables1[0]->merge(tables1[i]);
+            tables2[0]->merge(tables2[i]);
+            tables3[0]->merge(tables3[i]);
+            delete tables1[i];
+            delete tables2[i];
+            delete tables3[i];
+        }
+    }
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        delete readers[i];
+    }
+    delete[] readers;
 
     /*** If misra-gries is not active, then we must perform another pass to
      * extract the strings of the common terms. Otherwise, MGS gives it to

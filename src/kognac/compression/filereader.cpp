@@ -37,9 +37,22 @@ namespace timens = boost::chrono;
 
 string GZIP_EXTENSION = string(".gz");
 
+FileReader::FileReader(char *buffer, size_t sizebuffer, bool gzipped) :
+    byteArray(true), rawByteArray(buffer),
+    sizeByteArray(sizebuffer), compressed(gzipped) {
+    if (compressed) {
+        //Decompress the stream
+        io::filtering_ostream os;
+        os.push(io::gzip_decompressor());
+        os.push(io::back_inserter(uncompressedByteArray));
+        io::write(os, buffer, sizebuffer);
+    }
+    currentIdx = 0;
+}
+
 FileReader::FileReader(FileInfo sFile) :
-    compressed(!sFile.splittable), rawFile(sFile.path,
-                                           ios_base::in | ios_base::binary) {
+    byteArray(false), compressed(!sFile.splittable), rawFile(sFile.path,
+            ios_base::in | ios_base::binary) {
     //First check the extension to identify what kind of file it is.
     fs::path p(sFile.path);
     if (p.has_extension() && p.extension() == GZIP_EXTENSION) {
@@ -69,24 +82,57 @@ FileReader::FileReader(FileInfo sFile) :
 
 bool FileReader::parseTriple() {
     bool ok = false;
-    if (compressed) {
-        ok = (bool) std::getline(compressedFile, currentLine);
+    if (byteArray) {
+        if (compressed) {
+            if (currentIdx < uncompressedByteArray.size()) {
+                size_t e = currentIdx + 1;
+                while (e < uncompressedByteArray.size()
+                       && uncompressedByteArray[e] != '\n') {
+                    e++;
+                }
+                tripleValid = parseLine(&uncompressedByteArray[currentIdx],
+                                        e - currentIdx);
+                currentIdx = e;
+                return true;
+            } else {
+                tripleValid = false;
+                return false;
+            }
+        } else {
+            if (currentIdx < sizeByteArray) {
+                //read a line
+                size_t e = currentIdx + 1;
+                while (e < sizeByteArray && rawByteArray[e] != '\n') {
+                    e++;
+                }
+                tripleValid = parseLine(rawByteArray + currentIdx, e - currentIdx);
+                currentIdx = e;
+                return true;
+            } else {
+                tripleValid = false;
+                return false;
+            }
+        }
     } else {
-        ok = countBytes <= end && std::getline(rawFile, currentLine);
-        if (ok) {
-            countBytes = rawFile.tellg();
+        if (compressed) {
+            ok = (bool) std::getline(compressedFile, currentLine);
+        } else {
+            ok = countBytes <= end && std::getline(rawFile, currentLine);
+            if (ok) {
+                countBytes = rawFile.tellg();
+            }
         }
-    }
 
-    if (ok) {
-        if (currentLine.size() == 0 || currentLine.at(0) == '#') {
-            return parseTriple();
+        if (ok) {
+            if (currentLine.size() == 0 || currentLine.at(0) == '#') {
+                return parseTriple();
+            }
+            tripleValid = parseLine(currentLine.c_str(), (int)currentLine.size());
+            return true;
         }
-        tripleValid = parseLine(currentLine.c_str(), (int)currentLine.size());
-        return true;
+        tripleValid = false;
+        return false;
     }
-    tripleValid = false;
-    return false;
 }
 
 const char *FileReader::getCurrentS(int &length) {

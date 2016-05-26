@@ -26,6 +26,7 @@
 #include <iostream>
 #include <string>
 #include <exception>
+#include <vector>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/chrono.hpp>
 
@@ -47,6 +48,13 @@ typedef struct FileInfo {
 
 class FileReader {
 private:
+    //Params used if we read from a byte array
+    const bool byteArray;
+    std::vector<char> uncompressedByteArray;
+    char *rawByteArray;
+    size_t sizeByteArray;
+    size_t currentIdx;
+
     const bool compressed;
     ifstream rawFile;
     boost::iostreams::filtering_istream compressedFile;
@@ -69,6 +77,8 @@ private:
 
 public:
     FileReader(FileInfo file);
+
+    FileReader(char *buffer, size_t sizebuffer, bool gzipped);
 
     bool parseTriple();
 
