@@ -42,10 +42,14 @@ FileReader::FileReader(char *buffer, size_t sizebuffer, bool gzipped) :
     sizeByteArray(sizebuffer), compressed(gzipped) {
     if (compressed) {
         //Decompress the stream
+        //timens::system_clock::time_point start = timens::system_clock::now();
         io::filtering_ostream os;
         os.push(io::gzip_decompressor());
         os.push(io::back_inserter(uncompressedByteArray));
         io::write(os, buffer, sizebuffer);
+        //boost::chrono::duration<double> sec = boost::chrono::system_clock::now()
+        //                                      - start;
+        //BOOST_LOG_TRIVIAL(debug) << "Time decompressing " << sizebuffer << " bytes is " << sec.count() * 1000 << "ms.";
     }
     currentIdx = 0;
 }
