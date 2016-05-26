@@ -66,8 +66,10 @@ void DiskReader::run() {
         //Is there an available buffer that I can use?
         char *buffer = NULL;
         {
+            boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
             std::unique_lock<std::mutex> lk(mutex2);
             cv2.wait(lk, std::bind(&DiskReader::isAvailable, this));
+            waitingTime = boost::chrono::system_clock::now() - start;
             buffer = availablebuffers.back();
             availablebuffers.pop_back();
             lk.unlock();

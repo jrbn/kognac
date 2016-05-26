@@ -5,6 +5,7 @@
 
 #include <boost/log/trivial.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/chrono.hpp>
 
 #include <mutex>
 #include <condition_variable>
@@ -32,6 +33,8 @@ private:
     std::vector<Buffer> readybuffers;
 
     bool finished;
+
+    boost::chrono::duration<double> waitingTime;
 
 public:
     DiskReader(int nbuffers, std::vector<FileInfo> *files);
