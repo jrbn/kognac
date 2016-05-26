@@ -1740,12 +1740,6 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
                                copyHashes, sizeHashTable, tables1, tables2,
                                tables3, distinctValues, commonTermsMaps);
     } else {
-        /*** First I must merge all the heaps in a single one ***/
-        /*for (int i = 1; i < minConcurrentMGS; ++i) {
-            StringToNumberMap mapi = mgs[i]->getHeapElements();
-            mgs[0]->merge(mapi);
-        }*/ //This procedure is commmented because the implementation is bugged (and I don't believe we need it)
-
         /*** Determine a minimum threshold value from the count_min tables to
          * mark the element has common ***/
         long minFreq = getThresholdForUncommon(
@@ -1797,9 +1791,6 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
 
     /*** Delete the hashtables ***/
     BOOST_LOG_TRIVIAL(debug) << "Delete some datastructures";
-    //delete tables1[0];
-    //delete tables2[0];
-    //delete tables3[0];
     table1 = std::shared_ptr<Hashtable>(tables1[0]);
     table2 = std::shared_ptr<Hashtable>(tables2[0]);
     table3 = std::shared_ptr<Hashtable>(tables3[0]);
@@ -1816,22 +1807,6 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
         mergeCommonTermsMaps(finalMap, commonTermsMaps, parallelProcesses);
     }
     BOOST_LOG_TRIVIAL(debug) << "Size hashtable with common terms " << finalMap->size();
-
-    /*** Extract the uncommon terms ***/
-    /*BOOST_LOG_TRIVIAL(debug) << "Extract the uncommon terms";
-    for (int i = 1; i < parallelProcesses; ++i) {
-        threads[i - 1] = boost::thread(
-                             boost::bind(&Compressor::extractUncommonTerms, this,
-                                         dictPartitions, tmpFileNames[i], copyHashes,
-                                         i, parallelProcesses,
-                                         uncommonDictFileNames[i]));
-    }
-    extractUncommonTerms(dictPartitions, tmpFileNames[0], copyHashes, 0,
-                         parallelProcesses,
-                         uncommonDictFileNames[0]);
-    for (int i = 1; i < parallelProcesses; ++i) {
-        threads[i - 1].join();
-    }*/
 
     delete[] threads;
 }

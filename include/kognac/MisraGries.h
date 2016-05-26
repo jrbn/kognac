@@ -74,7 +74,7 @@ struct MG_hashstr {
 };
 
 typedef google::dense_hash_map<HashMapKey, long*, MG_hashstr, MG_eqstr> HashMap;
-typedef std::vector<std::pair<long, HashMapKey>> CounterVector;
+typedef std::vector<std::pair<long, HashMapKey> > CounterVector;
 
 typedef map<string, long> StringToNumberMap;
 
