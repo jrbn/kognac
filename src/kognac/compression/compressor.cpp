@@ -1668,7 +1668,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     DiskReader **readers = new DiskReader*[maxReadingThreads];
     boost::thread *threadReaders = new boost::thread[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
-        readers[i] = new DiskReader(max(1, (int)(parallelProcesses / maxReadingThreads)), &files[i]);
+        readers[i] = new DiskReader(max(2, (int)(parallelProcesses / maxReadingThreads)*2), &files[i]);
         threadReaders[i] = boost::thread(boost::bind(&DiskReader::run, readers[i]));
     }
 
