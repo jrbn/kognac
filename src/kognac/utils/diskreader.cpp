@@ -12,6 +12,7 @@ DiskReader::DiskReader(int nbuffers, std::vector<FileInfo> *files) {
 
     for (int i = 0; i < nbuffers; ++i) {
         availablebuffers.push_back(new char[maxsize]);
+        memset(availablebuffers.back(), 0, sizeof(char) * maxsize);
     }
 }
 
@@ -29,9 +30,8 @@ char *DiskReader::getfile(size_t &size, bool &gzipped) {
 
     Buffer info;
     bool gotit = false;
-    if (!finished) {
+    if (!readybuffers.empty()) {
         gotit = true;
-        assert(!readybuffers.empty());
         info = readybuffers.back();
         readybuffers.pop_back();
     }
@@ -59,7 +59,6 @@ void DiskReader::releasefile(char *file) {
 }
 
 void DiskReader::run() {
-    BOOST_LOG_TRIVIAL(debug) << "DiskReader: start reading the files";
     ifstream ifs;
     while (itr != files->end()) {
 
@@ -77,7 +76,9 @@ void DiskReader::run() {
         ifs.open(itr->path);
         assert(itr->start == 0);
         ifs.read(buffer, itr->size);
+        assert(ifs);
         ifs.close();
+
 
         {
             std::lock_guard<std::mutex> lk(mutex1);
@@ -104,11 +105,10 @@ void DiskReader::run() {
     }
     cv1.notify_all();
 
-    BOOST_LOG_TRIVIAL(debug) << "DiskReader: finished reading the files";
 }
 
 DiskReader::~DiskReader() {
-    for(int i = 0; i < availablebuffers.size(); ++i)
+    for (int i = 0; i < availablebuffers.size(); ++i)
         delete[] availablebuffers[i];
     availablebuffers.clear();
 }

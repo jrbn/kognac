@@ -90,16 +90,13 @@ bool FileReader::parseTriple() {
                         && uncompressedByteArray[e] != '\n') {
                     e++;
                 }
-                if (uncompressedByteArray[e] == '\n') {
-                    e++;
-                }
-                if (e == currentIdx + 1 || rawByteArray[currentIdx] == '#') {
-                    currentIdx = e;
+                if (e == currentIdx + 1 || uncompressedByteArray[currentIdx] == '#') {
+                    currentIdx = e + 1;
                     return parseTriple();
                 }
                 tripleValid = parseLine(&uncompressedByteArray[currentIdx],
                                         e - currentIdx);
-                currentIdx = e;
+                currentIdx = e + 1;
                 return true;
             } else {
                 tripleValid = false;
@@ -112,15 +109,12 @@ bool FileReader::parseTriple() {
                 while (e < sizeByteArray && rawByteArray[e] != '\n') {
                     e++;
                 }
-                if (uncompressedByteArray[e] == '\n') {
-                    e++;
-                }
                 if (e == currentIdx + 1 || rawByteArray[currentIdx] == '#') {
-                    currentIdx = e;
+                    currentIdx = e + 1;
                     return parseTriple();
                 }
                 tripleValid = parseLine(rawByteArray + currentIdx, e - currentIdx);
-                currentIdx = e;
+                currentIdx = e + 1;
                 return true;
             } else {
                 tripleValid = false;
