@@ -1478,7 +1478,7 @@ void Compressor::parse(int dictPartitions, int sampleMethod, int sampleArg,
         uncommonDictFileNames[i] = df2;
     }
 
-    SchemaExtractor *extractors = new SchemaExtractor[maxReadingThreads];
+    SchemaExtractor *extractors = new SchemaExtractor[parallelProcesses];
 
 #ifdef DEBUG
     //SchemaExtractor::initMap();
@@ -1666,8 +1666,10 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     BOOST_LOG_TRIVIAL(debug) << "Size hash table " << sizeHashTable;
 
     DiskReader **readers = new DiskReader*[maxReadingThreads];
+    boost::thread *threadReaders = new boost::thread[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
         readers[i] = new DiskReader(max(1, (int)(parallelProcesses / maxReadingThreads)), &files[i]);
+        threadReaders[i] = boost::thread(boost::bind(&DiskReader::run, readers[i]));
     }
 
     ParamsUncompressTriples params;
@@ -1739,6 +1741,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
         delete readers[i];
     }
     delete[] readers;
+    delete[] threadReaders;
 
     /*** If misra-gries is not active, then we must perform another pass to
      * extract the strings of the common terms. Otherwise, MGS gives it to

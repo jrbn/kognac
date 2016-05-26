@@ -87,8 +87,15 @@ bool FileReader::parseTriple() {
             if (currentIdx < uncompressedByteArray.size()) {
                 size_t e = currentIdx + 1;
                 while (e < uncompressedByteArray.size()
-                       && uncompressedByteArray[e] != '\n') {
+                        && uncompressedByteArray[e] != '\n') {
                     e++;
+                }
+                if (uncompressedByteArray[e] == '\n') {
+                    e++;
+                }
+                if (e == currentIdx + 1 || rawByteArray[currentIdx] == '#') {
+                    currentIdx = e;
+                    return parseTriple();
                 }
                 tripleValid = parseLine(&uncompressedByteArray[currentIdx],
                                         e - currentIdx);
@@ -104,6 +111,13 @@ bool FileReader::parseTriple() {
                 size_t e = currentIdx + 1;
                 while (e < sizeByteArray && rawByteArray[e] != '\n') {
                     e++;
+                }
+                if (uncompressedByteArray[e] == '\n') {
+                    e++;
+                }
+                if (e == currentIdx + 1 || rawByteArray[currentIdx] == '#') {
+                    currentIdx = e;
+                    return parseTriple();
                 }
                 tripleValid = parseLine(rawByteArray + currentIdx, e - currentIdx);
                 currentIdx = e;
@@ -163,11 +177,11 @@ void FileReader::checkRange(const char *pointer, const char* start,
 
 bool FileReader::parseLine(const char *line, const int sizeLine) {
 
+    const char* endLine = line + sizeLine;
+    const char *endS;
+    const char *endO = NULL;
     try {
-        const char* endLine = line + sizeLine;
-
         // Parse subject
-        const char *endS;
         startS = line;
         if (line[0] == '<') {
             endS = strchr(line, '>') + 1;
@@ -185,12 +199,15 @@ bool FileReader::parseLine(const char *line, const int sizeLine) {
 
         // Parse object
         startO = startP + lengthP + 1;
-        const char *endO = NULL;
         if (startO[0] == '<') { // URI
             endO = strchr(startO, '>') + 1;
         } else if (startO[0] == '"') { // Literal
             //Copy until the end of the string and remove character
-            endO = strrchr(startO, '.')  - 1;
+            endO = endLine;
+            while (*endO != '.' && endO >  startO) {
+                endO--;
+            }
+            endO--;
         } else { // Bnode
             endO = strchr(startO, ' ');
         }
