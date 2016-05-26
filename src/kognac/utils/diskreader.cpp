@@ -60,6 +60,7 @@ void DiskReader::releasefile(char *file) {
 
 void DiskReader::run() {
     ifstream ifs;
+	size_t count = 0;
     while (itr != files->end()) {
 
         //Is there an available buffer that I can use?
@@ -73,11 +74,13 @@ void DiskReader::run() {
         }
 
         //Read a file and copy it in buffer
+	BOOST_LOG_TRIVIAL(debug) << "Reading file " << itr->path << " remaining files " << (files->size() - count);
         ifs.open(itr->path);
         assert(itr->start == 0);
         ifs.read(buffer, itr->size);
         assert(ifs);
         ifs.close();
+	count++;
 
 
         {
