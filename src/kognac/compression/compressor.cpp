@@ -922,7 +922,8 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
 
     while (!reader.isEof()) {
         int sizeTerm = 0;
-        reader.parseByte(); //Ignore it. Should always be 0
+        int flag = reader.parseByte(); //Ignore it. Should always be 0
+        assert(flag == 0);
         const char *term = reader.parseString(sizeTerm);
 
         extractCommonTerm(term, sizeTerm, countFrequent,
@@ -1704,7 +1705,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
         params.table2 = tables2[i];
         params.table3 = tables3[i];
         params.writer = writers[i % maxReadingThreads];
-        params.idwriter = i % maxReadingThreads;
+        params.idwriter = i / maxReadingThreads;
         params.extractor = copyHashes ? extractors + i : NULL;
         params.distinctValues = distinctValues + i;
         params.resultsMGS = usemisgra ? &resultsMGS[i] : NULL;
@@ -1733,6 +1734,13 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1].join();
     }
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        delete readers[i];
+        delete writers[i];
+    }
+    delete[] readers;
+    delete[] writers;
+    delete[] threadReaders;
 
     //Merging the tables
     BOOST_LOG_TRIVIAL(debug) << "Merging the tables...";
@@ -1748,13 +1756,6 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
             delete tables3[i];
         }
     }
-    for (int i = 0; i < maxReadingThreads; ++i) {
-        delete readers[i];
-        delete writers[i];
-    }
-    delete[] readers;
-    delete[] writers;
-    delete[] threadReaders;
 
     /*** If misra-gries is not active, then we must perform another pass to
      * extract the strings of the common terms. Otherwise, MGS gives it to

@@ -19,7 +19,7 @@ private:
 
     std::vector<string> inputfiles;
     std::ofstream *streams;
-    std::vector<BlockToWrite> blocksToWrite;
+    std::list<BlockToWrite> blocksToWrite;
     std::thread currentthread;
     int nterminated;
 

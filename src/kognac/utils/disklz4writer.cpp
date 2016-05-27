@@ -30,6 +30,7 @@ void DiskLZ4Writer::writeByte(const int id, const int value) {
     assert(id < inputfiles.size());
     char *buffer = uncompressedbuffers[id];
     int sizebuffer = sizeuncompressedbuffers[id];
+    assert(sizebuffer <= SIZE_SEG);
 
     if (sizebuffer == SIZE_SEG) {
         compressAndQueue(id, buffer, sizebuffer);
@@ -37,7 +38,6 @@ void DiskLZ4Writer::writeByte(const int id, const int value) {
     }
     buffer[sizebuffer] = value;
     sizeuncompressedbuffers[id]++;
-
 }
 
 void DiskLZ4Writer::writeVLong(const int id, const long value) {
@@ -126,14 +126,22 @@ void DiskLZ4Writer::writeShort(const int id, const int value) {
 }
 
 void DiskLZ4Writer::setTerminated(const int id) {
+    //Write down the last buffer
+    char *buffer = uncompressedbuffers[id];
+    int sizebuffer = sizeuncompressedbuffers[id];
+    if (sizebuffer > 0)
+        compressAndQueue(id, buffer, sizebuffer);
+    sizeuncompressedbuffers[id] = 0;
+
     nterminated++;
-    cvBlockToWrite.notify_all();
+    cvBlockToWrite.notify_one();
 }
 
 void DiskLZ4Writer::compressAndQueue(const int id, char *input, const size_t sizeinput) {
     //Get a compressed buffer
     std::unique_lock<std::mutex> lk(mutexAvailableBuffer);
     cvAvailableBuffer.wait(lk, std::bind(&DiskLZ4Writer::areAvailableBuffers, this));
+    assert(buffers.size() > 0);
     char *buffer = buffers.back();
     buffers.pop_back();
     lk.unlock();
@@ -177,8 +185,8 @@ void DiskLZ4Writer::run() {
         std::unique_lock<std::mutex> lk(mutexBlockToWrite);
         cvBlockToWrite.wait(lk, std::bind(&DiskLZ4Writer::areBlocksToWrite, this));
         if (!blocksToWrite.empty()) {
-            block = blocksToWrite.back();
-            blocksToWrite.pop_back();
+            block = blocksToWrite.front();
+            blocksToWrite.pop_front();
             lk.unlock();
         } else { //Exit...
             lk.unlock();
@@ -197,7 +205,9 @@ void DiskLZ4Writer::run() {
 
 DiskLZ4Writer::~DiskLZ4Writer() {
     currentthread.join();
+
     for (int i = 0; i < inputfiles.size(); ++i) {
+        assert(sizeuncompressedbuffers[i] == 0);
         streams[i].close();
     }
     delete[] streams;
