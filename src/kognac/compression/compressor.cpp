@@ -120,16 +120,18 @@ void Compressor::parsePermutationSignature(int signature, int *output) {
 void Compressor::uncompressTriples(ParamsUncompressTriples params) {
     //vector<FileInfo> &files = params.files;
     DiskReader *filesreader = params.reader;
+    DiskLZ4Writer *fileswriter = params.writer;
+    const int idwriter = params.idwriter;
     Hashtable *table1 = params.table1;
     Hashtable *table2 = params.table2;
     Hashtable *table3 = params.table3;
-    string outFile = params.outFile;
+    //string outFile = params.outFile;
     SchemaExtractor *extractor = params.extractor;
     long *distinctValues = params.distinctValues;
     std::vector<string> *resultsMGS = params.resultsMGS;
     size_t sizeHeap = params.sizeHeap;
 
-    LZ4Writer out(outFile);
+    //LZ4Writer out(outFile);
     long count = 0;
     long countNotValid = 0;
     const char *supportBuffer = NULL;
@@ -177,13 +179,13 @@ void Compressor::uncompressTriples(ParamsUncompressTriples params) {
                 long h1 = table1->add(supportBuffer, length);
                 long h2 = table2->add(supportBuffer, length);
                 long h3 = table3->add(supportBuffer, length);
-                out.writeByte(0);
+                fileswriter->writeByte(idwriter, 0);
                 estimator.addElement(h1, h2, h3);
 
                 //This is an hack to save memcpy...
-                out.writeVLong(length + 2);
-                out.writeShort(length);
-                out.writeRawArray(supportBuffer, length);
+                fileswriter->writeVLong(idwriter, length + 2);
+                fileswriter->writeShort(idwriter, length);
+                fileswriter->writeRawArray(idwriter, supportBuffer, length);
 
                 supportBuffer = reader.getCurrentP(length);
 
@@ -198,12 +200,12 @@ void Compressor::uncompressTriples(ParamsUncompressTriples params) {
                 h1 = table1->add(supportBuffer, length);
                 h2 = table2->add(supportBuffer, length);
                 h3 = table3->add(supportBuffer, length);
-                out.writeByte(0);
+                fileswriter->writeByte(idwriter, 0);
                 estimator.addElement(h1, h2, h3);
 
-                out.writeVLong(length + 2);
-                out.writeShort(length);
-                out.writeRawArray(supportBuffer, length);
+                fileswriter->writeVLong(idwriter, length + 2);
+                fileswriter->writeShort(idwriter, length);
+                fileswriter->writeRawArray(idwriter, supportBuffer, length);
 
                 supportBuffer = reader.getCurrentO(length);
 
@@ -219,12 +221,12 @@ void Compressor::uncompressTriples(ParamsUncompressTriples params) {
                 h1 = table1->add(supportBuffer, length);
                 h2 = table2->add(supportBuffer, length);
                 h3 = table3->add(supportBuffer, length);
-                out.writeByte(0);
+                fileswriter->writeByte(idwriter, 0);
                 estimator.addElement(h1, h2, h3);
 
-                out.writeVLong(length + 2);
-                out.writeShort(length);
-                out.writeRawArray(supportBuffer, length);
+                fileswriter->writeVLong(idwriter, length + 2);
+                fileswriter->writeShort(idwriter, length);
+                fileswriter->writeRawArray(idwriter, supportBuffer, length);
             } else {
                 countNotValid++;
             }
@@ -234,6 +236,7 @@ void Compressor::uncompressTriples(ParamsUncompressTriples params) {
         buffer = filesreader->getfile(sizebuffer, gzipped);
     }
 
+    fileswriter->setTerminated(idwriter);
     *distinctValues = estimator.estimateCardinality();
 
     if (extractor != NULL) {
@@ -919,7 +922,8 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
 
     while (!reader.isEof()) {
         int sizeTerm = 0;
-        reader.parseByte(); //Ignore it. Should always be 0
+        int flag = reader.parseByte(); //Ignore it. Should always be 0
+        assert(flag == 0);
         const char *term = reader.parseString(sizeTerm);
 
         extractCommonTerm(term, sizeTerm, countFrequent,
@@ -1665,11 +1669,21 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
                                                (unsigned int)(memForHashTables / sizeof(long))));
     BOOST_LOG_TRIVIAL(debug) << "Size hash table " << sizeHashTable;
 
+    //Set up the output file names
+    std::vector<std::vector<string>> blocksOutputFiles;
+    blocksOutputFiles.resize(maxReadingThreads);
+    for(int i = 0; i < parallelProcesses; ++i) {
+        tmpFileNames[i] = kbPath + string("/tmp-") + boost::lexical_cast<string>(i);
+        blocksOutputFiles[i % maxReadingThreads].push_back(tmpFileNames[i]);
+    }
+
     DiskReader **readers = new DiskReader*[maxReadingThreads];
     boost::thread *threadReaders = new boost::thread[maxReadingThreads];
+    DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
         readers[i] = new DiskReader(max(2, (int)(parallelProcesses / maxReadingThreads)*2), &files[i]);
         threadReaders[i] = boost::thread(boost::bind(&DiskReader::run, readers[i]));
+        writers[i] = new DiskLZ4Writer(blocksOutputFiles[i], 10);
     }
 
     ParamsUncompressTriples params;
@@ -1683,8 +1697,6 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
                                    &Hashes::fnv1a_56);
         tables3[i] = new Hashtable(sizeHashTable,
                                    &Hashes::murmur3_56);
-        tmpFileNames[i] = kbPath + string("/tmp-")
-                          + boost::lexical_cast<string>(i);
 
 
         //params.files = files[i];
@@ -1692,7 +1704,8 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
         params.table1 = tables1[i];
         params.table2 = tables2[i];
         params.table3 = tables3[i];
-        params.outFile = tmpFileNames[i];
+        params.writer = writers[i % maxReadingThreads];
+        params.idwriter = i / maxReadingThreads;
         params.extractor = copyHashes ? extractors + i : NULL;
         params.distinctValues = distinctValues + i;
         params.resultsMGS = usemisgra ? &resultsMGS[i] : NULL;
@@ -1706,14 +1719,13 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
                                &Hashes::fnv1a_56);
     tables3[0] = new Hashtable(sizeHashTable,
                                &Hashes::murmur3_56);
-    tmpFileNames[0] = kbPath + string("/tmp-") + to_string(0);
-
     //params.files = files[0];
     params.reader = readers[0];
     params.table1 = tables1[0];
     params.table2 = tables2[0];
     params.table3 = tables3[0];
-    params.outFile = tmpFileNames[0];
+    params.writer = writers[0];
+    params.idwriter = 0;
     params.extractor = copyHashes ? extractors : NULL;
     params.distinctValues = distinctValues;
     params.resultsMGS = usemisgra ? &resultsMGS[0] : NULL;
@@ -1722,6 +1734,13 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1].join();
     }
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        delete readers[i];
+        delete writers[i];
+    }
+    delete[] readers;
+    delete[] writers;
+    delete[] threadReaders;
 
     //Merging the tables
     BOOST_LOG_TRIVIAL(debug) << "Merging the tables...";
@@ -1737,11 +1756,6 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
             delete tables3[i];
         }
     }
-    for (int i = 0; i < maxReadingThreads; ++i) {
-        delete readers[i];
-    }
-    delete[] readers;
-    delete[] threadReaders;
 
     /*** If misra-gries is not active, then we must perform another pass to
      * extract the strings of the common terms. Otherwise, MGS gives it to
