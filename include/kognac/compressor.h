@@ -31,6 +31,7 @@
 #include <kognac/factory.h>
 
 #include <kognac/diskreader.h>
+#include <kognac/disklz4writer.h>
 
 #ifdef COUNTSKETCH
 #include <kognac/CountSketch.h>
@@ -94,7 +95,9 @@ struct ParamsUncompressTriples {
     Hashtable *table1;
     Hashtable *table2;
     Hashtable *table3;
-    string outFile;
+    //string outFile;
+    DiskLZ4Writer *writer;
+    int idwriter;
     SchemaExtractor *extractor;
     long *distinctValues;
     std::vector<string> *resultsMGS;
