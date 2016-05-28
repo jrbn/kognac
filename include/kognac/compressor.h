@@ -32,6 +32,7 @@
 
 #include <kognac/diskreader.h>
 #include <kognac/disklz4writer.h>
+#include <kognac/disklz4reader.h>
 
 #ifdef COUNTSKETCH
 #include <kognac/CountSketch.h>
@@ -62,7 +63,10 @@ using namespace std;
 
 class SchemaExtractor;
 struct ParamsExtractCommonTermProcedure {
-    string inputFile;
+    //string inputFile;
+    DiskLZ4Reader *reader;
+    int idReader;
+
     Hashtable **tables;
     GStringToNumberMap *map;
     int dictPartitions;
@@ -261,6 +265,7 @@ private:
 
     void do_countmin_secondpass(const int dictPartitions,
                                 const int sampleArg,
+                                const int maxReadingThreads,
                                 const int parallelProcesses,
                                 bool copyHashes,
                                 const unsigned int sizeHashTable,

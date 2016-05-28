@@ -672,7 +672,6 @@ void Compressor::extractCommonTerm(const char* term, const int sizeTerm,
                                    const int dictPartitions,
                                    long &minValueToBeAdded,
                                    const long maxMapSize,  GStringToNumberMap *map,
-
                                    std::priority_queue<std::pair<string, long>,
                                    std::vector<std::pair<string, long> >,
                                    priorityQueueOrder> &queue) {
@@ -702,49 +701,10 @@ void Compressor::extractCommonTerm(const char* term, const int sizeTerm,
             }
         }
     }
-
-    /* if (termInfrequent) {
-        countInfrequent++;
-        int partition = Utils::getPartition(term + 2, sizeTerm - 2,
-                                            dictPartitions);
-        AnnotatedTerm t;
-        t.size = sizeTerm;
-        t.term = term;
-        t.tripleIdAndPosition = (long) (tripleId << 2) + (pos & 0x3);
-
-        if (!copyHashes) {
-            //Add it into the file
-            t.useHashes = false;
-        } else {
-            //Output the three pairs
-            t.useHashes = true;
-            if (pos == 0) {
-                long hashp = Hashes::murmur3_56(prevEntries[1] + 2, sPrevEntries[1] - 2);
-                long hasho = Hashes::murmur3_56(prevEntries[2] + 2, sPrevEntries[2] - 2);
-                t.hashT1 = hashp;
-                t.hashT2 = hasho;
-            } else if (pos == 1) {
-                long hashs = Hashes::murmur3_56(prevEntries[0] + 2, sPrevEntries[0] - 2);
-                long hasho = Hashes::murmur3_56(prevEntries[2] + 2, sPrevEntries[2] - 2);
-                t.hashT1 = hashs;
-                t.hashT2 = hasho;
-            } else { //pos = 2
-                long hashs = Hashes::murmur3_56(prevEntries[0] + 2, sPrevEntries[0] - 2);
-                long hashp = Hashes::murmur3_56(prevEntries[1] + 2, sPrevEntries[1] - 2);
-                t.hashT1 = hashs;
-                t.hashT2 = hashp;
-            }
-        }
-        t.writeTo(udictFile[partition]);
-    } else {*/
     countFrequent++;
     bool mapTooSmall = map->size() < maxMapSize;
     if ((mapTooSmall || valueHighEnough)
             && map->find(string(term + 2, sizeTerm - 2)) == map->end()) {
-        //Create copy
-        //char *newTerm = new char[sizeTerm];
-        //memcpy(newTerm, term, sizeTerm);
-
         std::pair<string, long> pair = std::make_pair(string(term + 2, sizeTerm - 2),
                                        minValue);
         map->insert(pair);
@@ -754,43 +714,9 @@ void Compressor::extractCommonTerm(const char* term, const int sizeTerm,
             std::pair<string, long> elToRemove = queue.top();
             queue.pop();
             map->erase(elToRemove.first);
-            /*//Insert value into the dictionary
-            if (!duplicateCache.exists(elToRemove.first)) {
-                //Which partition?
-                int partition = Utils::getPartition(
-                                    elToRemove.first + 2,
-                                    Utils::decode_short(elToRemove.first),
-                                    dictPartitions);
-
-                AnnotatedTerm t;
-                t.size = Utils::decode_short((char*) elToRemove.first) + 2;
-                t.term = elToRemove.first;
-                t.tripleIdAndPosition = -1;
-                t.writeTo(dictFile[partition]);
-
-                //Add it into the map
-                duplicateCache.add(elToRemove.first);
-            }*/
             minValueToBeAdded = queue.top().second;
         }
-    }/* else {
-        //Copy the term in a file so that later it can be inserted in the dictionaries
-        if (!duplicateCache.exists(term + 2, sizeTerm - 2)) {
-            //Which partition?
-            int partition = Utils::getPartition(term + 2,
-                                                sizeTerm - 2, dictPartitions);
-
-            AnnotatedTerm t;
-            t.size = sizeTerm;
-            t.term = term;
-            t.tripleIdAndPosition = -1;
-            t.writeTo(dictFile[partition]);
-
-            //Add it into the map
-            duplicateCache.add(term + 2, sizeTerm - 2);
-        }
     }
-    }*/
 }
 
 void Compressor::extractUncommonTerms(const int dictPartitions, string inputFile,
@@ -893,24 +819,22 @@ void Compressor::extractUncommonTerms(const int dictPartitions, string inputFile
 
 void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
 
-    string inputFile = params.inputFile;
+    //string inputFile = params.inputFile;
+    DiskLZ4Reader *reader = params.reader;
+    const int idReader = params.idReader;
     Hashtable **tables = params.tables;
     GStringToNumberMap *map = params.map;
     int dictPartitions = params.dictPartitions;
-    //string *dictFileName = params.dictFileName;
     int maxMapSize = params.maxMapSize;
 
     int pos = 0;
-    //int parallelProcesses = params.parallelProcesses;
-    //string *udictFileName = params.singleTerms;
     int thresholdForUncommon = params.thresholdForUncommon;
-    //const bool copyHashes = params.copyHashes;
 
     Hashtable *table1 = tables[0];
     Hashtable *table2 = tables[1];
     Hashtable *table3 = tables[2];
 
-    LZ4Reader reader(inputFile);
+    //LZ4Reader reader(inputFile);
     map->set_empty_key(EMPTY_KEY);
     map->set_deleted_key(DELETED_KEY);
 
@@ -920,11 +844,11 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
 
     long countFrequent = 0;
 
-    while (!reader.isEof()) {
+    while (!reader->isEOF(idReader)) {
         int sizeTerm = 0;
-        int flag = reader.parseByte(); //Ignore it. Should always be 0
+        int flag = reader->readByte(idReader); //Ignore it. Should always be 0
         assert(flag == 0);
-        const char *term = reader.parseString(sizeTerm);
+        const char *term = reader->readString(idReader, sizeTerm);
 
         extractCommonTerm(term, sizeTerm, countFrequent,
                           thresholdForUncommon, table1, table2, table3,
@@ -1574,6 +1498,7 @@ unsigned int Compressor::getThresholdForUncommon(
 
 void Compressor::do_countmin_secondpass(const int dictPartitions,
                                         const int sampleArg,
+                                        const int maxReadingThreads,
                                         const int parallelProcesses,
                                         bool copyHashes,
                                         const unsigned int sizeHashTable,
@@ -1606,9 +1531,23 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
     params.copyHashes = copyHashes;
     boost::thread *threads = new boost::thread[parallelProcesses - 1];
 
+    //Group the input files tmpfilenames into maxReadingThreads groups
+    std::vector<std::vector<string>> chunks;
+    for(int i = 0; i < parallelProcesses; ++i) {
+        chunks[i % maxReadingThreads].push_back(tmpFileNames[i]);
+    }
+
+    //Init the DiskReaders
+    DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        readers[i] = new DiskLZ4Reader(chunks[i], 3);
+    }
+
     BOOST_LOG_TRIVIAL(debug) << "Extract the common terms";
     for (int i = 1; i < parallelProcesses; ++i) {
-        params.inputFile = tmpFileNames[i];
+        //params.inputFile = tmpFileNames[i];
+        params.reader = readers[i % maxReadingThreads];
+        params.idReader = i / maxReadingThreads;
         params.map = &commonTermsMaps[i];
         params.dictFileName = dictFileNames[i];
         params.idProcess = i;
@@ -1616,7 +1555,9 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
         threads[i - 1] = boost::thread(
                              boost::bind(&Compressor::extractCommonTerms, this, params));
     }
-    params.inputFile = tmpFileNames[0];
+    //params.inputFile = tmpFileNames[0];
+    params.reader = readers[0];
+    params.idReader = 0;
     params.map = &commonTermsMaps[0];
     params.dictFileName = dictFileNames[0];
     params.idProcess = 0;
@@ -1625,6 +1566,9 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1].join();
     }
+    for(int i = 0; i < maxReadingThreads; ++i)
+        delete readers[i];
+    delete[] readers;
     delete[] threads;
 }
 
@@ -1672,7 +1616,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     //Set up the output file names
     std::vector<std::vector<string>> blocksOutputFiles;
     blocksOutputFiles.resize(maxReadingThreads);
-    for(int i = 0; i < parallelProcesses; ++i) {
+    for (int i = 0; i < parallelProcesses; ++i) {
         tmpFileNames[i] = kbPath + string("/tmp-") + boost::lexical_cast<string>(i);
         blocksOutputFiles[i % maxReadingThreads].push_back(tmpFileNames[i]);
     }
@@ -1681,9 +1625,9 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     boost::thread *threadReaders = new boost::thread[maxReadingThreads];
     DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
-        readers[i] = new DiskReader(max(2, (int)(parallelProcesses / maxReadingThreads)*2), &files[i]);
+        readers[i] = new DiskReader(max(2, (int)(parallelProcesses / maxReadingThreads) * 2), &files[i]);
         threadReaders[i] = boost::thread(boost::bind(&DiskReader::run, readers[i]));
-        writers[i] = new DiskLZ4Writer(blocksOutputFiles[i], 10);
+        writers[i] = new DiskLZ4Writer(blocksOutputFiles[i], 1000);
     }
 
     ParamsUncompressTriples params;
@@ -1761,7 +1705,8 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
      * extract the strings of the common terms. Otherwise, MGS gives it to
      * us ***/
     if (!usemisgra) {
-        do_countmin_secondpass(dictPartitions, sampleArg, parallelProcesses,
+        do_countmin_secondpass(dictPartitions, sampleArg, maxReadingThreads,
+                               parallelProcesses,
                                copyHashes, sizeHashTable, tables1, tables2,
                                tables3, distinctValues, commonTermsMaps);
     } else {
