@@ -22,7 +22,6 @@ private:
     std::list<BlockToWrite> *blocksToWrite;
     size_t addedBlocksToWrite;
     int currentWriteFileID;
-    int lastAddedFileID;
 
     std::thread currentthread;
     int nterminated;

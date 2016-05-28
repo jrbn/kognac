@@ -12,6 +12,8 @@
 
 using namespace std;
 
+#define SIZE_DISK_BUFFER SIZE_COMPRESSED_SEG * 1000
+
 class DiskLZ4Reader {
 private:
     struct BlockToRead {

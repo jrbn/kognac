@@ -7,13 +7,15 @@ DiskLZ4Reader::DiskLZ4Reader(std::vector<string> &files, int nbuffersPerFile) {
     //Init data structures
     for (int i = 0; i < files.size(); ++i) {
         for (int j = 0; j < nbuffersPerFile; ++j)
-            diskbufferpool.push_back(new char [SIZE_COMPRESSED_SEG * 1000]);
+            diskbufferpool.push_back(new char [SIZE_DISK_BUFFER]);
         supportstringbuffers.push_back(std::unique_ptr<char[]>(new char[MAX_TERM_SIZE + 2]));
     }
     for (int i = 0; i < files.size(); ++i) {
         FileInfo inf;
         inf.path = files[i];
-        inf.eof = fs::file_size(files[i]) > 0;
+        inf.eof = fs::file_size(files[i]) == 0;
+        if (inf.eof)
+            neofs++;
         inf.buffer = new char[SIZE_SEG];
         inf.sizebuffer = 0;
         inf.pivot = 0;
@@ -63,11 +65,11 @@ void DiskLZ4Reader::run() {
         l.unlock();
 
         //Read the file and put the content in the disk buffer
-        size_t sizeToBeRead = SIZE_COMPRESSED_SEG * 1000;
+        size_t sizeToBeRead = SIZE_DISK_BUFFER;
         readers[currentFileIdx].read(buffer, sizeToBeRead);
-        if (!readers[currentFileIdx]) {
+        if (readers[currentFileIdx].eof()) {
             sizeToBeRead = readers[currentFileIdx].gcount();
-            assert(sizeToBeRead <= SIZE_COMPRESSED_SEG * 1000);
+            assert(sizeToBeRead <= SIZE_DISK_BUFFER);
             assert(readers[currentFileIdx].eof());
             files[currentFileIdx].eof = true;
             readers[currentFileIdx].close();
@@ -104,8 +106,6 @@ void DiskLZ4Reader::getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
 }
 
 bool DiskLZ4Reader::uncompressBuffer(const int id) {
-    //Read the compressed stream and extract an uncompressed block from it.
-
     //Get a lock
     std::unique_lock<std::mutex> lk(m_files[id]);
     //Make sure you wait until there is a new block
@@ -113,6 +113,13 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
 
     if (compressedbuffers[id].empty())
         return false;
+
+    if (compressedbuffers[id].front().pivot ==
+            compressedbuffers[id].front().sizebuffer) {
+        getNewCompressedBuffer(lk, id);
+        if (compressedbuffers[id].empty())
+            return false;
+    }
 
     //Init vars
     size_t sizecomprbuffer = compressedbuffers[id].front().sizebuffer;
@@ -123,7 +130,7 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
     int token;
     int compressionMethod;
     int compressedLen;
-    int uncompressedLen;
+    int uncompressedLen = -1;
     if (pivot + 21 <= sizecomprbuffer) {
         token = comprb[pivot + 8] & 0xFF;
         compressedLen = Utils::decode_intLE(comprb, pivot + 9);
@@ -170,6 +177,7 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
 
         memcpy(tmpbuffer.get() + copiedSize, comprb, compressedLen - copiedSize);
         pivot = compressedLen - copiedSize;
+        startb = tmpbuffer.get();
 
     }
     compressedbuffers[id].front().pivot = pivot;
@@ -181,7 +189,7 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
         memcpy(f.buffer, startb, uncompressedLen);
         break;
     case 32:
-        if (!LZ4_decompress_fast(tmpbuffer.get(), startb, uncompressedLen)) {
+        if (!LZ4_decompress_fast(startb, f.buffer, uncompressedLen)) {
             BOOST_LOG_TRIVIAL(error) << "Error in the decompression.";
             throw 10;
         }
@@ -202,6 +210,7 @@ bool DiskLZ4Reader::isEOF(const int id) {
 }
 
 int DiskLZ4Reader::readByte(const int id) {
+    assert(id < files.size());
     if (files[id].pivot >= files[id].sizebuffer) {
         bool resp = uncompressBuffer(id);
         assert(resp);

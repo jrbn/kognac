@@ -1533,6 +1533,7 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
 
     //Group the input files tmpfilenames into maxReadingThreads groups
     std::vector<std::vector<string>> chunks;
+    chunks.resize(maxReadingThreads);
     for(int i = 0; i < parallelProcesses; ++i) {
         chunks[i % maxReadingThreads].push_back(tmpFileNames[i]);
     }
