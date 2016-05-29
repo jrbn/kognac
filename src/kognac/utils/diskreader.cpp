@@ -69,14 +69,14 @@ void DiskReader::run() {
             boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
             std::unique_lock<std::mutex> lk(mutex2);
             cv2.wait(lk, std::bind(&DiskReader::isAvailable, this));
-            waitingTime = boost::chrono::system_clock::now() - start;
+            waitingTime += boost::chrono::system_clock::now() - start;
             buffer = availablebuffers.back();
             availablebuffers.pop_back();
             lk.unlock();
         }
 
         //Read a file and copy it in buffer
-	BOOST_LOG_TRIVIAL(debug) << "Reading file " << itr->path << " remaining files " << (files->size() - count);
+	BOOST_LOG_TRIVIAL(debug) << "Reading file " << itr->path << " remaining files " << (files->size() - count) << " waiting time " << waitingTime.count() * 1000;
         ifs.open(itr->path);
         assert(itr->start == 0);
         ifs.read(buffer, itr->size);
