@@ -3,6 +3,8 @@
 
 #include <kognac/lz4io.h>
 
+#include <boost/chrono.hpp>
+
 #include <list>
 #include <vector>
 #include <thread>
@@ -12,7 +14,7 @@
 
 using namespace std;
 
-#define SIZE_DISK_BUFFER SIZE_COMPRESSED_SEG * 1000
+#define SIZE_DISK_BUFFER SIZE_COMPRESSED_SEG *1000
 
 class DiskLZ4Reader {
 private:
@@ -36,6 +38,7 @@ private:
     std::vector<char*> diskbufferpool;
     std::mutex m_diskbufferpool;
     std::condition_variable cond_diskbufferpool;
+    boost::chrono::duration<double> time_diskbufferpool;
 
     //Used to track status of reading
     int neofs;
@@ -46,6 +49,7 @@ private:
     ifstream *readers;
     std::mutex *m_files;
     std::condition_variable *cond_files;
+    boost::chrono::duration<double> *time_files;
 
     //support buffers for strings
     std::vector<std::unique_ptr<char[]>> supportstringbuffers;
