@@ -28,6 +28,7 @@ DiskLZ4Reader::DiskLZ4Reader(std::vector<string> &files, int nbuffersPerFile) {
     cond_files = new std::condition_variable[files.size()];
     time_files = new boost::chrono::duration<double>[files.size()];
     time_diskbufferpool = boost::chrono::duration<double>::zero();
+    time_rawreading = boost::chrono::duration<double>::zero();
 
     //Open all files
     readers = new ifstream[files.size()];
@@ -71,6 +72,7 @@ void DiskLZ4Reader::run() {
         l.unlock();
 
         //Read the file and put the content in the disk buffer
+        start = boost::chrono::system_clock::now();
         size_t sizeToBeRead = SIZE_DISK_BUFFER;
         readers[currentFileIdx].read(buffer, sizeToBeRead);
         if (readers[currentFileIdx].eof()) {
@@ -80,7 +82,10 @@ void DiskLZ4Reader::run() {
             files[currentFileIdx].eof = true;
             readers[currentFileIdx].close();
             neofs++;
+            BOOST_LOG_TRIVIAL(debug) << "Finished reading file " <<
+                                     files[currentFileIdx].path;
         }
+        time_rawreading += boost::chrono::system_clock::now() - start;
 
         //Put the content of the disk buffer in the blockToRead container
         assert(sizeToBeRead > 0);
@@ -284,12 +289,13 @@ const char *DiskLZ4Reader::readString(const int id, int &size) {
 DiskLZ4Reader::~DiskLZ4Reader() {
     currentthread.join();
 
+    BOOST_LOG_TRIVIAL(debug) << "Time reading all data from disk " << time_rawreading.count() * 1000 << "ms.";
     BOOST_LOG_TRIVIAL(debug) << "Time waiting lock m_diskbufferpool " << time_diskbufferpool.count() * 1000 << "ms.";
     double avg = 0;
-    for(int i = 0; i < files.size(); ++i) {
+    for (int i = 0; i < files.size(); ++i) {
         avg += time_files[i].count() * 1000;
     }
-    BOOST_LOG_TRIVIAL(debug) << "Time (avg) waiting locks files " << avg/files.size() << "ms.";
+    BOOST_LOG_TRIVIAL(debug) << "Time (avg) waiting locks files " << avg / files.size() << "ms.";
 
     delete[] compressedbuffers;
     for (int i = 0; i < diskbufferpool.size(); ++i)

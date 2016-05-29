@@ -39,6 +39,7 @@ private:
     std::mutex m_diskbufferpool;
     std::condition_variable cond_diskbufferpool;
     boost::chrono::duration<double> time_diskbufferpool;
+    boost::chrono::duration<double> time_rawreading;
 
     //Used to track status of reading
     int neofs;
