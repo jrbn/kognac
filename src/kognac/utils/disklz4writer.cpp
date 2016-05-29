@@ -5,8 +5,9 @@ DiskLZ4Writer::DiskLZ4Writer(std::vector<string> &files, int nbuffersPerFile) : 
     //Create a number of compressed buffers
     for (int i = 0; i < files.size(); i++) {
         //Create 10 buffers for each file
+        parentbuffers.push_back(new char[SIZE_COMPRESSED_SEG * nbuffersPerFile]);
         for (int j = 0; j < nbuffersPerFile; ++j) {
-            buffers.push_back(new char[SIZE_COMPRESSED_SEG]);
+            buffers.push_back(parentbuffers.back() + j * SIZE_COMPRESSED_SEG);
         }
     }
 
@@ -24,6 +25,9 @@ DiskLZ4Writer::DiskLZ4Writer(std::vector<string> &files, int nbuffersPerFile) : 
     nterminated = 0;
     currentthread = thread(std::bind(&DiskLZ4Writer::run, this));
     //A thread is now running
+    blocksToWrite = new std::list<BlockToWrite>[files.size()];
+    addedBlocksToWrite = 0;
+    currentWriteFileID = 0;
 }
 
 void DiskLZ4Writer::writeByte(const int id, const int value) {
@@ -150,6 +154,7 @@ void DiskLZ4Writer::compressAndQueue(const int id, char *input, const size_t siz
     //First 8 bytes is LZOBlock.
     //Then there is a token which has encoded in the 0xF0 bits
     //the type of compression.
+    memset(buffer, 0, 21);
     strcpy(buffer, "LZOBLOCK");
     buffer[8] = 32;
 
@@ -166,13 +171,14 @@ void DiskLZ4Writer::compressAndQueue(const int id, char *input, const size_t siz
 
     //Copy in the writing queue
     std::unique_lock<std::mutex> lk2(mutexBlockToWrite);
-    blocksToWrite.push_back(b);
+    blocksToWrite[id].push_back(b);
+    addedBlocksToWrite++;
     lk2.unlock();
     cvBlockToWrite.notify_one();
 }
 
 bool DiskLZ4Writer::areBlocksToWrite() {
-    return !blocksToWrite.empty() || nterminated == inputfiles.size();
+    return addedBlocksToWrite > 0 || nterminated == inputfiles.size();
 }
 
 bool DiskLZ4Writer::areAvailableBuffers() {
@@ -181,23 +187,42 @@ bool DiskLZ4Writer::areAvailableBuffers() {
 
 void DiskLZ4Writer::run() {
     while (true) {
-        BlockToWrite block;
+        std::list<BlockToWrite> blocks;
+
         std::unique_lock<std::mutex> lk(mutexBlockToWrite);
         cvBlockToWrite.wait(lk, std::bind(&DiskLZ4Writer::areBlocksToWrite, this));
-        if (!blocksToWrite.empty()) {
-            block = blocksToWrite.front();
-            blocksToWrite.pop_front();
+        if (addedBlocksToWrite > 0) {
+            //Search the first non-empty file to write
+            int nextid = (currentWriteFileID + 1) % inputfiles.size();
+            while (blocksToWrite[nextid].empty()) {
+                nextid = (nextid + 1) % inputfiles.size();
+            }
+            currentWriteFileID = nextid;
+
+            blocksToWrite[currentWriteFileID].swap(blocks);
+            //block = blocksToWrite[currentWriteFileID].front();
+            //blocksToWrite[currentWriteFileID].pop_front();
+            addedBlocksToWrite -= blocks.size();
             lk.unlock();
         } else { //Exit...
             lk.unlock();
             return;
         }
 
-        streams[block.idfile].write(block.buffer, block.sizebuffer);
+        auto it = blocks.begin();
+        while (it != blocks.end()) {
+            assert(it->sizebuffer > 0 && it->sizebuffer < 10000);
+            streams[it->idfile].write(it->buffer, it->sizebuffer);
+            it++;
+        }
 
         //Return the buffer so that it can be reused
         unique_lock<std::mutex> lk2(mutexAvailableBuffer);
-        buffers.push_back(block.buffer);
+        it = blocks.begin();
+        while (it != blocks.end()) {
+            buffers.push_back(it->buffer);
+            it++;
+        }
         lk2.unlock();
         cvAvailableBuffer.notify_one();
     }
@@ -212,9 +237,10 @@ DiskLZ4Writer::~DiskLZ4Writer() {
     }
     delete[] streams;
 
-    for (int i = 0; i < buffers.size(); ++i)
-        delete[] buffers[i];
+    for (int i = 0; i < parentbuffers.size(); ++i)
+        delete[] parentbuffers[i];
 
     for (int i = 0; i < uncompressedbuffers.size(); ++i)
         delete[] uncompressedbuffers[i];
+    delete[] blocksToWrite;
 }

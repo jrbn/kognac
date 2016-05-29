@@ -21,10 +21,14 @@ private:
 
     std::vector<string> inputfiles;
     std::ofstream *streams;
-    std::list<BlockToWrite> blocksToWrite;
+    std::list<BlockToWrite> *blocksToWrite;
+    size_t addedBlocksToWrite;
+    int currentWriteFileID;
+
     std::thread currentthread;
     int nterminated;
 
+    std::vector<char*> parentbuffers;
     std::vector<char*> buffers;
     std::vector<char*> uncompressedbuffers;
     std::vector<int> sizeuncompressedbuffers;
