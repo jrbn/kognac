@@ -5,21 +5,21 @@ DiskLZ4Writer::DiskLZ4Writer(std::vector<string> &files, int nbuffersPerFile) : 
     //Create a number of compressed buffers
     for (int i = 0; i < files.size(); i++) {
         //Create 10 buffers for each file
-        parentbuffers.push_back(new char[SIZE_COMPRESSED_SEG * nbuffersPerFile]);
+        parentbuffers.push_back(new char[SIZE_COMPRESSED_BUFFER * nbuffersPerFile]);
         for (int j = 0; j < nbuffersPerFile; ++j) {
-            buffers.push_back(parentbuffers.back() + j * SIZE_COMPRESSED_SEG);
+            buffers.push_back(parentbuffers.back() + SIZE_COMPRESSED_BUFFER * j);
         }
     }
 
     //One uncompressed buffer per file
-    for (int i = 0; i < files.size(); ++i) {
+    /*for (int i = 0; i < files.size(); ++i) {
         uncompressedbuffers.push_back(new char[SIZE_SEG]);
         sizeuncompressedbuffers.push_back(0);
-    }
+    }*/
+    fileinfo.resize(files.size());
 
     streams = new ofstream[files.size()];
     for (int i = 0; i < files.size(); ++i) {
-        //Open a file
         streams[i].open(files[i]);
     }
     nterminated = 0;
@@ -32,16 +32,12 @@ DiskLZ4Writer::DiskLZ4Writer(std::vector<string> &files, int nbuffersPerFile) : 
 
 void DiskLZ4Writer::writeByte(const int id, const int value) {
     assert(id < inputfiles.size());
-    char *buffer = uncompressedbuffers[id];
-    int sizebuffer = sizeuncompressedbuffers[id];
-    assert(sizebuffer <= SIZE_SEG);
-
-    if (sizebuffer == SIZE_SEG) {
-        compressAndQueue(id, buffer, sizebuffer);
-        sizeuncompressedbuffers[id] = sizebuffer = 0;
+    char *buffer = fileinfo[id].buffer;
+    if (fileinfo[id].sizebuffer == SIZE_SEG) {
+        compressAndQueue(id);
+        fileinfo[id].sizebuffer = 0;
     }
-    buffer[sizebuffer] = value;
-    sizeuncompressedbuffers[id]++;
+    buffer[fileinfo[id].sizebuffer++] = value;
 }
 
 void DiskLZ4Writer::writeVLong(const int id, const long value) {
@@ -64,25 +60,22 @@ void DiskLZ4Writer::writeVLong(const int id, const long value) {
 
 void DiskLZ4Writer::writeLong(const int id, const long value) {
     assert(id < inputfiles.size());
-    char *buffer = uncompressedbuffers[id];
-    int sizebuffer = sizeuncompressedbuffers[id];
-
-    if (sizebuffer + 8 <= SIZE_SEG) {
-        Utils::encode_long(buffer, sizebuffer, value);
-        sizeuncompressedbuffers[id] += 8;
+    char *buffer = fileinfo[id].buffer;
+    if (fileinfo[id].sizebuffer + 8 <= SIZE_SEG) {
+        Utils::encode_long(buffer, fileinfo[id].sizebuffer, value);
+        fileinfo[id].sizebuffer += 8;
     } else {
         char supportBuffer[8];
         Utils::encode_long(supportBuffer, 0, value);
         int i = 0;
-        for (; i < 8 && sizebuffer < SIZE_SEG; ++i) {
-            buffer[sizebuffer++] = supportBuffer[i];
+        for (; i < 8 && fileinfo[id].sizebuffer < SIZE_SEG; ++i) {
+            buffer[fileinfo[id].sizebuffer++] = supportBuffer[i];
         }
-        compressAndQueue(id, buffer, sizebuffer);
-        sizeuncompressedbuffers[id] = sizebuffer = 0;
-        for (; i < 8 && sizebuffer < SIZE_SEG; ++i) {
-            buffer[sizebuffer++] = supportBuffer[i];
+        compressAndQueue(id);
+        fileinfo[id].sizebuffer = 0;
+        for (; i < 8 && fileinfo[id].sizebuffer < SIZE_SEG; ++i) {
+            buffer[fileinfo[id].sizebuffer++] = supportBuffer[i];
         }
-        sizeuncompressedbuffers[id] = sizebuffer;
     }
 
 }
@@ -91,64 +84,102 @@ void DiskLZ4Writer::writeRawArray(const int id, const char *bytes,
                                   const size_t length) {
     int len = length;
     assert(id < inputfiles.size());
-    char *buffer = uncompressedbuffers[id];
-    int sizebuffer = sizeuncompressedbuffers[id];
-
-    if (sizebuffer + len <= SIZE_SEG) {
-        memcpy(buffer + sizebuffer, bytes, len);
+    char *buffer = fileinfo[id].buffer;
+    if (fileinfo[id].sizebuffer + len <= SIZE_SEG) {
+        memcpy(buffer + fileinfo[id].sizebuffer, bytes, len);
     } else {
-        int remSize = SIZE_SEG - sizebuffer;
-        memcpy(buffer + sizebuffer, bytes, remSize);
-        len -= remSize;
-        sizebuffer += remSize;
-        compressAndQueue(id, buffer, sizebuffer);
-        sizeuncompressedbuffers[id] = sizebuffer = 0;
+        int remSize = SIZE_SEG - fileinfo[id].sizebuffer;
+        memcpy(buffer + fileinfo[id].sizebuffer, bytes, remSize);
+        fileinfo[id].sizebuffer += remSize;
+        compressAndQueue(id);
+        fileinfo[id].sizebuffer = 0;
+        len = len - remSize;
         memcpy(buffer, bytes + remSize, len);
     }
-    sizeuncompressedbuffers[id] += len;
+    fileinfo[id].sizebuffer += len;
 
 }
 
 void DiskLZ4Writer::writeShort(const int id, const int value) {
     assert(id < inputfiles.size());
-    char *buffer = uncompressedbuffers[id];
-    int sizebuffer = sizeuncompressedbuffers[id];
-
-    if (sizebuffer == SIZE_SEG) {
-        compressAndQueue(id, buffer, sizebuffer);
-        sizebuffer = sizeuncompressedbuffers[id] = 0;
-    } else if (sizebuffer == SIZE_SEG - 1) {
+    char *buffer = fileinfo[id].buffer;
+    if (fileinfo[id].sizebuffer == SIZE_SEG) {
+        compressAndQueue(id);
+        fileinfo[id].sizebuffer = 0;
+    } else if (fileinfo[id].sizebuffer == SIZE_SEG - 1) {
         char supportBuffer[2];
         Utils::encode_short(supportBuffer, value);
         writeByte(id, supportBuffer[0]);
         writeByte(id, supportBuffer[1]);
         return;
     }
-
-    Utils::encode_short(buffer + sizebuffer, value);
-    sizeuncompressedbuffers[id] += 2;
+    Utils::encode_short(buffer + fileinfo[id].sizebuffer, value);
+    fileinfo[id].sizebuffer += 2;
 }
 
 void DiskLZ4Writer::setTerminated(const int id) {
     //Write down the last buffer
-    char *buffer = uncompressedbuffers[id];
-    int sizebuffer = sizeuncompressedbuffers[id];
-    if (sizebuffer > 0)
-        compressAndQueue(id, buffer, sizebuffer);
-    sizeuncompressedbuffers[id] = 0;
+    int sizebuffer = fileinfo[id].sizebuffer;
+    if (sizebuffer > 0) {
+        compressAndQueue(id);
+        fileinfo[id].sizebuffer = 0;
+    }
 
+    //Flush the compressed buffer on disk
+    if (fileinfo[id].pivotCompressedBuffer > 0) {
+        BlockToWrite b;
+        b.buffer = fileinfo[id].compressedbuffer;
+        b.sizebuffer = fileinfo[id].pivotCompressedBuffer;
+        b.idfile = id;
+
+        //Copy in the writing queue
+        std::unique_lock<std::mutex> lk2(mutexBlockToWrite);
+        blocksToWrite[id].push_back(b);
+        addedBlocksToWrite++;
+        lk2.unlock();
+    }
+
+    mutexTerminated.lock();
     nterminated++;
+    mutexTerminated.unlock();
     cvBlockToWrite.notify_one();
 }
 
-void DiskLZ4Writer::compressAndQueue(const int id, char *input, const size_t sizeinput) {
+void DiskLZ4Writer::compressAndQueue(const int id) {
     //Get a compressed buffer
-    std::unique_lock<std::mutex> lk(mutexAvailableBuffer);
-    cvAvailableBuffer.wait(lk, std::bind(&DiskLZ4Writer::areAvailableBuffers, this));
-    assert(buffers.size() > 0);
-    char *buffer = buffers.back();
-    buffers.pop_back();
-    lk.unlock();
+    FileInfo &file = fileinfo[id];
+    char *buffer = file.compressedbuffer + file.pivotCompressedBuffer;
+    if (file.compressedbuffer == NULL ||
+            file.pivotCompressedBuffer +
+            SIZE_COMPRESSED_SEG >= SIZE_COMPRESSED_BUFFER) {
+
+        //flush current buffer
+        if (file.compressedbuffer != NULL) {
+            BlockToWrite b;
+            b.buffer = file.compressedbuffer;
+            b.sizebuffer = file.pivotCompressedBuffer;
+            b.idfile = id;
+
+            //Copy in the writing queue
+            std::unique_lock<std::mutex> lk2(mutexBlockToWrite);
+            blocksToWrite[id].push_back(b);
+            addedBlocksToWrite++;
+            lk2.unlock();
+            cvBlockToWrite.notify_one();
+        }
+
+        //Get a new buffer
+        std::unique_lock<std::mutex> lk(mutexAvailableBuffer);
+        cvAvailableBuffer.wait(lk, std::bind(&DiskLZ4Writer::areAvailableBuffers, this));
+        assert(buffers.size() > 0);
+        char *newbuffer = buffers.back();
+        buffers.pop_back();
+        lk.unlock();
+
+        file.compressedbuffer = buffer = newbuffer;
+        file.pivotCompressedBuffer = 0;
+        assert(buffer != NULL);
+    }
 
     //Compress the buffer
     //First 8 bytes is LZOBlock.
@@ -160,21 +191,10 @@ void DiskLZ4Writer::compressAndQueue(const int id, char *input, const size_t siz
 
     //Then there is the compressed size but I will write it later...
     //... and finally the uncompressed size
-    Utils::encode_intLE(buffer, 13, sizeinput);
-    const int compressedSize = LZ4_compress(input, buffer + 21, sizeinput);
+    Utils::encode_intLE(buffer, 13, file.sizebuffer);
+    const int compressedSize = LZ4_compress(file.buffer, buffer + 21, file.sizebuffer);
     Utils::encode_intLE(buffer, 9, compressedSize);
-
-    BlockToWrite b;
-    b.buffer = buffer;
-    b.sizebuffer = compressedSize + 21;
-    b.idfile = id;
-
-    //Copy in the writing queue
-    std::unique_lock<std::mutex> lk2(mutexBlockToWrite);
-    blocksToWrite[id].push_back(b);
-    addedBlocksToWrite++;
-    lk2.unlock();
-    cvBlockToWrite.notify_one();
+    file.pivotCompressedBuffer += compressedSize + 21;
 }
 
 bool DiskLZ4Writer::areBlocksToWrite() {
@@ -211,7 +231,6 @@ void DiskLZ4Writer::run() {
 
         auto it = blocks.begin();
         while (it != blocks.end()) {
-            assert(it->sizebuffer > 0 && it->sizebuffer < 10000);
             streams[it->idfile].write(it->buffer, it->sizebuffer);
             it++;
         }
@@ -232,7 +251,6 @@ DiskLZ4Writer::~DiskLZ4Writer() {
     currentthread.join();
 
     for (int i = 0; i < inputfiles.size(); ++i) {
-        assert(sizeuncompressedbuffers[i] == 0);
         streams[i].close();
     }
     delete[] streams;
@@ -240,7 +258,5 @@ DiskLZ4Writer::~DiskLZ4Writer() {
     for (int i = 0; i < parentbuffers.size(); ++i)
         delete[] parentbuffers[i];
 
-    for (int i = 0; i < uncompressedbuffers.size(); ++i)
-        delete[] uncompressedbuffers[i];
     delete[] blocksToWrite;
 }

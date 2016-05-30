@@ -639,6 +639,8 @@ void Kognac::assignIdsToAllTerms(string inputdir, long & counter,
     while (!reader.isEof()) {
         Kognac_TextClassID el;
         el.readFrom(&reader);
+        if (el.classID != classId)
+            BOOST_LOG_TRIVIAL(debug) << "ClassID: " << el.classID << " first count " << counter;
         assert(el.classID >= classId);
         classId = el.classID;
         out << to_string(counter) << " " << to_string(el.size) << " ";

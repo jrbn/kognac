@@ -849,7 +849,6 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
         int flag = reader->readByte(idReader); //Ignore it. Should always be 0
         assert(flag == 0);
         const char *term = reader->readString(idReader, sizeTerm);
-
         extractCommonTerm(term, sizeTerm, countFrequent,
                           thresholdForUncommon, table1, table2, table3,
                           dictPartitions, minValueToBeAdded,
@@ -1628,7 +1627,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     for (int i = 0; i < maxReadingThreads; ++i) {
         readers[i] = new DiskReader(max(2, (int)(parallelProcesses / maxReadingThreads) * 2), &files[i]);
         threadReaders[i] = boost::thread(boost::bind(&DiskReader::run, readers[i]));
-        writers[i] = new DiskLZ4Writer(blocksOutputFiles[i], 1000);
+        writers[i] = new DiskLZ4Writer(blocksOutputFiles[i], 3);
     }
 
     ParamsUncompressTriples params;
