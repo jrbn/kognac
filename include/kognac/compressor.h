@@ -211,6 +211,24 @@ struct AnnotatedTerm {
         }
     }
 
+    void writeTo(const int id, DiskLZ4Writer *writer) {
+        writer->writeString(id, term, size);
+
+        if (useHashes) {
+            writer->writeByte(id, 3);
+            writer->writeLong(id, tripleIdAndPosition);
+            writer->writeLong(id, hashT1);
+            writer->writeLong(id, hashT2);
+        } else {
+            if (tripleIdAndPosition == -1) {
+                writer->writeByte(id, 0);
+            } else {
+                writer->writeByte(id, 2);
+                writer->writeLong(id, tripleIdAndPosition);
+            }
+        }
+    }
+
     bool equals(const char *el) {
         int l = Utils::decode_short(el);
         if (l == size - 2) {
@@ -343,7 +361,9 @@ protected:
 
     void extractUncommonTerm(const char *term, const int sizeTerm,
                              ByteArrayToNumberMap * map,
-                             LZ4Writer **udictFile,
+                             const int idwriter,
+                             DiskLZ4Writer *writer,
+                             //LZ4Writer **udictFile,
                              const long tripleId,
                              const int pos,
                              const int dictPartitions,
@@ -360,10 +380,12 @@ protected:
 
     void extractCommonTerms(ParamsExtractCommonTermProcedure params);
 
-    void extractUncommonTerms(const int dictPartitions, string inputFile,
+    void extractUncommonTerms(const int dictPartitions, DiskLZ4Reader *inputFile,
+                              const int inputFileId,
                               const bool copyHashes, const int idProcess,
                               const int parallelProcesses,
-                              string * udictFileName,
+                              DiskLZ4Writer *writer,
+                              //string * udictFileName,
                               const bool splitUncommonByHash);
 
     void mergeCommonTermsMaps(ByteArrayToNumberMap * finalMap,

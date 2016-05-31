@@ -73,6 +73,12 @@ void DiskLZ4Writer::writeLong(const int id, const long value) {
 
 }
 
+void DiskLZ4Writer::writeString(const int id, const char *bytes,
+                                  const size_t length) {
+    writeVLong(id, length);
+    writeRawArray(id, bytes, length);
+}
+
 void DiskLZ4Writer::writeRawArray(const int id, const char *bytes,
                                   const size_t length) {
     int len = length;
@@ -226,7 +232,6 @@ void DiskLZ4Writer::run() {
         start = boost::chrono::system_clock::now();
         auto it = blocks.begin();
         while (it != blocks.end()) {
-            BOOST_LOG_TRIVIAL(debug) << "Write FileID: " << it->idfile << " size: " << it->sizebuffer << " totatlsize: " << stream.tellp();
             char el[4];
             Utils::encode_int(el, it->idfile);
             stream.write(el, 4);

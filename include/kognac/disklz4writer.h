@@ -89,6 +89,8 @@ public:
 
     void writeRawArray(const int id, const char *buffer, const size_t sizebuffer);
 
+    void writeString(const int id, const char *buffer, const size_t sizebuffer);
+
     void writeShort(const int id, const int value);
 
     void setTerminated(const int id);

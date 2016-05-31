@@ -616,7 +616,9 @@ void Compressor::uncompressAndSampleTriples(vector<FileInfo> &files,
 
 void Compressor::extractUncommonTerm(const char *term, const int sizeTerm,
                                      ByteArrayToNumberMap *map,
-                                     LZ4Writer **udictFile,
+                                     const int idwriter,
+                                     DiskLZ4Writer *writer,
+                                     //LZ4Writer **udictFile,
                                      const long tripleId,
                                      const int pos,
                                      const int partitions,
@@ -624,8 +626,8 @@ void Compressor::extractUncommonTerm(const char *term, const int sizeTerm,
                                      char **prevEntries, int *sPrevEntries) {
 
     if (map->find(term) == map->end()) {
-        const int partition = Utils::getPartition(term + 2, sizeTerm - 2,
-                              partitions);
+        //const int partition = Utils::getPartition(term + 2, sizeTerm - 2,
+        //                      partitions);
         AnnotatedTerm t;
         t.size = sizeTerm;
         t.term = term;
@@ -654,7 +656,9 @@ void Compressor::extractUncommonTerm(const char *term, const int sizeTerm,
                 t.hashT2 = hashp;
             }
         }
-        t.writeTo(udictFile[partition]);
+        //t.writeTo(udictFile[partition]);
+        t.writeTo(idwriter, writer);
+    } else {
     }
 }
 
@@ -719,37 +723,23 @@ void Compressor::extractCommonTerm(const char* term, const int sizeTerm,
     }
 }
 
-void Compressor::extractUncommonTerms(const int dictPartitions, string inputFile,
+void Compressor::extractUncommonTerms(const int dictPartitions,
+                                      DiskLZ4Reader *reader,
+                                      const int inputFileId,
                                       const bool copyHashes, const int idProcess,
                                       const int parallelProcesses,
-                                      string *udictFileName,
+                                      DiskLZ4Writer *writer,
+                                      //string *udictFileName,
                                       const bool splitByHash) {
 
     //Either one or the other. Both are not supported in extractUncommonTerm
     assert(!splitByHash || dictPartitions == 1);
+    assert(!splitByHash);// should not be invoked anymore
 
     int partitions = dictPartitions;
     if (splitByHash)
         partitions = partitions * parallelProcesses;
 
-    LZ4Writer **udictFile = new LZ4Writer*[partitions];
-    if (splitByHash) {
-        string prefixFile;
-        for (int i = 0; i < partitions; ++i) {
-            const int modHash =  i % parallelProcesses;
-            if (modHash == 0) {
-                prefixFile = udictFileName[i / parallelProcesses];
-            }
-            udictFile[i] = new LZ4Writer(prefixFile + string(".") +
-                                         to_string(modHash));
-        }
-    } else {
-        for (int i = 0; i < partitions; ++i) {
-            udictFile[i] = new LZ4Writer(udictFileName[i]);
-        }
-    }
-
-    LZ4Reader reader(inputFile);
     char *prevEntries[3];
     int sPrevEntries[3];
     if (copyHashes) {
@@ -761,15 +751,15 @@ void Compressor::extractUncommonTerms(const int dictPartitions, string inputFile
     long tripleId = idProcess;
     int pos = 0;
 
-    while (!reader.isEof()) {
+    while (!reader->isEOF(inputFileId)) {
         int sizeTerm = 0;
-        int flag = reader.parseByte(); //Ignore it. Should always be 0
+        int flag = reader->readByte(inputFileId); //Ignore it. Should always be 0
         if (flag != 0) {
             BOOST_LOG_TRIVIAL(error) << "Flag should always be zero!";
             throw 10;
         }
 
-        const char *term = reader.parseString(sizeTerm);
+        const char *term = reader->readString(inputFileId, sizeTerm);
         if (copyHashes) {
             if (pos != 2) {
                 memcpy(prevEntries[pos], term, sizeTerm);
@@ -779,23 +769,27 @@ void Compressor::extractUncommonTerms(const int dictPartitions, string inputFile
                 sPrevEntries[2] = sizeTerm;
 
                 extractUncommonTerm(prevEntries[0], sPrevEntries[0], finalMap,
-                                    udictFile, tripleId, 0,
+                                    inputFileId,
+                                    writer, tripleId, 0,
                                     (splitByHash) ? parallelProcesses : dictPartitions, copyHashes,
                                     prevEntries, sPrevEntries);
 
                 extractUncommonTerm(prevEntries[1], sPrevEntries[1], finalMap,
-                                    udictFile, tripleId, 1,
+                                    inputFileId,
+                                    writer, tripleId, 1,
                                     (splitByHash) ? parallelProcesses : dictPartitions, copyHashes,
                                     prevEntries, sPrevEntries);
 
                 extractUncommonTerm(term, sizeTerm, finalMap,
-                                    udictFile, tripleId, pos,
+                                    inputFileId,
+                                    writer, tripleId, pos,
                                     (splitByHash) ? parallelProcesses : dictPartitions, copyHashes,
                                     prevEntries, sPrevEntries);
             }
         } else {
             extractUncommonTerm(term, sizeTerm, finalMap,
-                                udictFile, tripleId, pos,
+                                inputFileId,
+                                writer, tripleId, pos,
                                 (splitByHash) ? parallelProcesses : dictPartitions, copyHashes,
                                 prevEntries, sPrevEntries);
         }
@@ -806,15 +800,17 @@ void Compressor::extractUncommonTerms(const int dictPartitions, string inputFile
         }
     }
 
+    writer->setTerminated(inputFileId);
+
     if (copyHashes) {
         delete[] prevEntries[0];
         delete[] prevEntries[1];
     }
 
-    for (int i = 0; i < partitions; ++i) {
+    /*for (int i = 0; i < partitions; ++i) {
         delete udictFile[i];
     }
-    delete[] udictFile;
+    delete[] udictFile;*/
 }
 
 void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
@@ -1390,9 +1386,9 @@ void Compressor::parse(int dictPartitions, int sampleMethod, int sampleArg,
     vector<FileInfo> *files = splitInputInChunks(input, maxReadingThreads);
 
     /*** Set name dictionary files ***/
-    dictFileNames = new string*[parallelProcesses];
-    uncommonDictFileNames = new string*[parallelProcesses];
-    for (int i = 0; i < parallelProcesses; ++i) {
+    dictFileNames = new string*[maxReadingThreads];
+    uncommonDictFileNames = new string*[maxReadingThreads];
+    for (int i = 0; i < maxReadingThreads ; ++i) {
         string *df = new string[dictPartitions];
         string *df2 = new string[dictPartitions];
         for (int j = 0; j < dictPartitions; ++j) {
@@ -1452,22 +1448,43 @@ void Compressor::parse(int dictPartitions, int sampleMethod, int sampleArg,
     if (!onlySample) {
         /*** Extract the uncommon terms ***/
         BOOST_LOG_TRIVIAL(debug) << "Extract the uncommon terms";
+        DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
+        DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            readers[i] = new DiskLZ4Reader(tmpFileNames[i],
+                                           parallelProcesses / maxReadingThreads, 3);
+            writers[i] = new DiskLZ4Writer(uncommonDictFileNames[i][0],
+                                           parallelProcesses / maxReadingThreads, 3);
+        }
+
         boost::thread *threads = new boost::thread[parallelProcesses];
         for (int i = 1; i < parallelProcesses; ++i) {
             threads[i - 1] = boost::thread(
                                  boost::bind(&Compressor::extractUncommonTerms, this,
-                                             dictPartitions, tmpFileNames[i], copyHashes,
+                                             dictPartitions, readers[i % maxReadingThreads],
+                                             i / maxReadingThreads,
+                                             copyHashes,
                                              i, parallelProcesses,
-                                             uncommonDictFileNames[i],
+                                             writers[i % maxReadingThreads],
+                                             //uncommonDictFileNames[i],
                                              splitUncommonByHash));
         }
-        extractUncommonTerms(dictPartitions, tmpFileNames[0], copyHashes, 0,
+        extractUncommonTerms(dictPartitions, readers[0], 0, copyHashes, 0,
                              parallelProcesses,
-                             uncommonDictFileNames[0],
+                             writers[0],
+                             //uncommonDictFileNames[0],
                              splitUncommonByHash);
         for (int i = 1; i < parallelProcesses; ++i) {
             threads[i - 1].join();
         }
+
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            delete readers[i];
+            delete writers[i];
+        }
+        delete[] readers;
+        delete[] writers;
+
         BOOST_LOG_TRIVIAL(debug) << "Finished the extraction of the uncommon terms";
         delete[] threads;
     }
@@ -2760,16 +2777,9 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
     assignNumbersToCommonTermsMap(finalMap, counters, writers, NULL, ndicts, true);
 
     /*** Assign a number to the other entries. Split them into two files.
-     * The ones that must be loaded into the hashmap, and the ones used for the merge join ***/
+     * The ones that must be loaded into the hashmap, and the ones used for
+     * the merge join ***/
     BOOST_LOG_TRIVIAL(debug) << "Merge (and assign counters) of dictionary entries";
-    /*boost::thread *threads = new boost::thread[ndicts - 1];
-    for (int i = 1; i < ndicts; ++i) {
-        threads[i - 1] = boost::thread(
-                             boost::bind(&Compressor::mergeNotPopularEntries, this,
-                                         &filesToBeMerged[i], writers[i], notSoUncommonFiles[i],
-                                         uncommonFiles[i], &counters[i], ndicts,
-                                         parallelProcesses));
-    }*/
     if (ndicts > 1) {
         BOOST_LOG_TRIVIAL(error) << "The current version of the code supports only one dictionary partition";
         throw 10;
@@ -2779,10 +2789,6 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
                                notSoUncommonFiles[0], uncommonFiles[0], &counters[0], ndicts,
                                parallelProcesses);
     }
-    /*for (int i = 1; i < ndicts; ++i) {
-        threads[i - 1].join();
-    }
-    delete[] threads;*/
     BOOST_LOG_TRIVIAL(debug) << "... done";
 
     /*** Remove unused data structures ***/
