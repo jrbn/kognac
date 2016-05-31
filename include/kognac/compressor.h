@@ -173,6 +173,25 @@ struct AnnotatedTerm {
         }
     }
 
+    void readFrom(const int id, DiskLZ4Reader *reader) {
+        term = reader->readString(id, size);
+
+        char b = reader->readByte(id);
+        if (b >> 1 != 0) {
+            tripleIdAndPosition = reader->readLong(id);
+            if (b & 1) {
+                useHashes = true;
+                hashT1 = reader->readLong(id);
+                hashT2 = reader->readLong(id);
+            } else {
+                useHashes = false;
+            }
+        } else {
+            tripleIdAndPosition = -1;
+            useHashes = false;
+        }
+    }
+
     void readFrom(LZ4Reader *reader) {
         term = reader->parseString(size);
 
@@ -306,7 +325,7 @@ private:
     static std::vector<string> getPartitionBoundaries(const string kbdir,
             const int partitions);
 
-    static void rangePartitionFiles(int nthreads, vector<string> *inputFiles,
+    static void rangePartitionFiles(int readingThreads, int nthreads, vector<string> *inputFiles,
                                     std::vector<string> &outputFiles,
                                     const std::vector<string> &boundaries);
 
@@ -392,8 +411,10 @@ protected:
                               GStringToNumberMap * maps, int nmaps);
 
     void mergeNotPopularEntries(vector<string> *inputFiles,
-                                string globalDictOutput, string outputFile1, string outputFile2,
-                                long * startCounter, int increment, int parallelProcesses);
+                                string globalDictOutput, string outputFile2,
+                                long * startCounter, int increment,
+                                int parallelProcesses,
+                                int maxReadingThreads);
 
     void assignNumbersToCommonTermsMap(ByteArrayToNumberMap * finalMap,
                                        long * counters, LZ4Writer **writers,
@@ -420,11 +441,16 @@ protected:
     void sortByTripleID(vector<string> *inputFiles, string outputFile,
                         const long maxMemory);
 
-    void immemorysort(string **inputFiles, int parallelProcesses, string outputFile, int *noutputFiles,
+    void immemorysort(string **inputFiles,
+                      int maxReadingThreads,
+                      int parallelProcesses,
+                      string outputFile,
+                      int *noutputFiles,
                       bool removeDuplicates,
                       const long maxSizeToSort, bool sample);
 
-    void inmemorysort_seq(const string inputFile,
+    void inmemorysort_seq(DiskLZ4Reader *reader,
+                          const int idReader,
                           int idx,
                           const int incrIdx,
                           const long maxMemPerThread,
@@ -433,6 +459,7 @@ protected:
                           bool sample);
 
     void sortDictionaryEntriesByText(string **input, const int ndicts,
+                                     const int maxReadingThreads,
                                      const int parallelProcesses,
                                      string * prefixOutputFiles,
                                      int *noutputfiles,
@@ -469,7 +496,9 @@ public:
                bool onlySample);
 
     virtual void compress(string * permDirs, int nperms, int signaturePerms,
-                          string * dictionaries, int ndicts, int parallelProcesses);
+                          string * dictionaries, int ndicts,
+                          int parallelProcesses,
+                          int maxReadingThreads);
 
     string **dictFileNames;
     string **uncommonDictFileNames;
