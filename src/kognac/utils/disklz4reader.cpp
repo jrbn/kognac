@@ -98,6 +98,10 @@ void DiskLZ4Reader::run() {
     }
     reader.close();
     BOOST_LOG_TRIVIAL(debug) << "Finished reading the input file";
+
+    //Notify all attached files that might be waiting that there is nothing else to read
+    for(int i = 0; i < files.size(); ++i)
+        cond_files[i].notify_one();
 }
 
 bool DiskLZ4Reader::getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
