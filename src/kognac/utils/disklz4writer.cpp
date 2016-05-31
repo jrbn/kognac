@@ -22,6 +22,7 @@ DiskLZ4Writer::DiskLZ4Writer(string file, int npartitions, int nbuffersPerFile) 
 
     time_rawwriting = boost::chrono::duration<double>::zero();
     time_waitingwriting = boost::chrono::duration<double>::zero();
+    time_waitingbuffer = boost::chrono::duration<double>::zero();
 }
 
 void DiskLZ4Writer::writeByte(const int id, const int value) {
@@ -169,8 +170,12 @@ void DiskLZ4Writer::compressAndQueue(const int id) {
         }
 
         //Get a new buffer
+        auto start = boost::chrono::system_clock::now();
         std::unique_lock<std::mutex> lk(mutexAvailableBuffer);
         cvAvailableBuffer.wait(lk, std::bind(&DiskLZ4Writer::areAvailableBuffers, this));
+        auto sec = boost::chrono::system_clock::now() - start;
+        time_waitingbuffer += sec;
+
         assert(buffers.size() > 0);
         char *newbuffer = buffers.back();
         buffers.pop_back();
@@ -243,7 +248,7 @@ void DiskLZ4Writer::run() {
         }
         time_rawwriting += boost::chrono::system_clock::now() - start;
 
-        BOOST_LOG_TRIVIAL(debug) << "WRITING TIME " << time_rawwriting.count() << "ec. Waiting " << time_waitingwriting.count() << "sec.";
+        BOOST_LOG_TRIVIAL(debug) << "WRITING TIME " << time_rawwriting.count() << "ec. Waitingwriting " << time_waitingwriting.count() << "sec." << " Waiting buffer " << time_waitingbuffer.count();
 
         //Return the buffer so that it can be reused
         unique_lock<std::mutex> lk2(mutexAvailableBuffer);
@@ -262,6 +267,7 @@ DiskLZ4Writer::~DiskLZ4Writer() {
 
     BOOST_LOG_TRIVIAL(debug) << "Time writing all data from disk " << time_rawwriting.count()  << "ms.";
     BOOST_LOG_TRIVIAL(debug) << "Time waiting writing " << time_waitingwriting.count() << "ms.";
+    BOOST_LOG_TRIVIAL(debug) << "Time waiting buffer " << time_waitingbuffer.count() << "ms.";
 
     stream.close();
     for (int i = 0; i < parentbuffers.size(); ++i)

@@ -47,6 +47,7 @@ private:
     std::ofstream stream;
     boost::chrono::duration<double> time_rawwriting;
     boost::chrono::duration<double> time_waitingwriting;
+    boost::chrono::duration<double> time_waitingbuffer;
 
     std::mutex mutexBlockToWrite;
     std::condition_variable cvBlockToWrite;
