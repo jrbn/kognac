@@ -21,6 +21,7 @@ DiskLZ4Writer::DiskLZ4Writer(string file, int npartitions, int nbuffersPerFile) 
     currentWriteFileID = 0;
 
     time_rawwriting = boost::chrono::duration<double>::zero();
+    time_waitingwriting = boost::chrono::duration<double>::zero();
 }
 
 void DiskLZ4Writer::writeByte(const int id, const int value) {
