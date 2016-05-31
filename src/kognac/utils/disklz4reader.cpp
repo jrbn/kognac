@@ -292,13 +292,13 @@ const char *DiskLZ4Reader::readString(const int id, int &size) {
 DiskLZ4Reader::~DiskLZ4Reader() {
     currentthread.join();
 
-    BOOST_LOG_TRIVIAL(debug) << "Time reading all data from disk " << time_rawreading.count() * 1000 << "ms.";
-    BOOST_LOG_TRIVIAL(debug) << "Time waiting lock m_diskbufferpool " << time_diskbufferpool.count() * 1000 << "ms.";
+    BOOST_LOG_TRIVIAL(debug) << "Time reading all data from disk " << time_rawreading.count()  << "sec.";
+    BOOST_LOG_TRIVIAL(debug) << "Time waiting lock m_diskbufferpool " << time_diskbufferpool.count() << "sec.";
     double avg = 0;
     for (int i = 0; i < files.size(); ++i) {
-        avg += time_files[i].count() * 1000;
+        avg += time_files[i].count();
     }
-    BOOST_LOG_TRIVIAL(debug) << "Time (avg) waiting locks files " << avg / files.size() << "ms.";
+    BOOST_LOG_TRIVIAL(debug) << "Time (avg) waiting locks files " << avg / files.size() << "sec.";
 
     delete[] compressedbuffers;
     for (int i = 0; i < diskbufferpool.size(); ++i)

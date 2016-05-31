@@ -242,6 +242,8 @@ void DiskLZ4Writer::run() {
         }
         time_rawwriting += boost::chrono::system_clock::now() - start;
 
+        BOOST_LOG_TRIVIAL(debug) << "WRITING TIME " << time_rawwriting.count() << "ec. Waiting " << time_waitingwriting.count() << "sec.";
+
         //Return the buffer so that it can be reused
         unique_lock<std::mutex> lk2(mutexAvailableBuffer);
         it = blocks.begin();
@@ -257,8 +259,8 @@ void DiskLZ4Writer::run() {
 DiskLZ4Writer::~DiskLZ4Writer() {
     currentthread.join();
 
-    BOOST_LOG_TRIVIAL(debug) << "Time writing all data from disk " << time_rawwriting.count() * 1000 << "ms.";
-    BOOST_LOG_TRIVIAL(debug) << "Time waiting writing " << time_waitingwriting.count() * 1000 << "ms.";
+    BOOST_LOG_TRIVIAL(debug) << "Time writing all data from disk " << time_rawwriting.count()  << "ms.";
+    BOOST_LOG_TRIVIAL(debug) << "Time waiting writing " << time_waitingwriting.count() << "ms.";
 
     stream.close();
     for (int i = 0; i < parentbuffers.size(); ++i)
