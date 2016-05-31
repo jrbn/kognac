@@ -3,26 +3,20 @@
 
 namespace fs = boost::filesystem;
 
-DiskLZ4Reader::DiskLZ4Reader(std::vector<string> &files, int nbuffersPerFile) {
+DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerFile) {
     //Init data structures
-    for (int i = 0; i < files.size(); ++i) {
+    for (int i = 0; i < npartitions; ++i) {
         for (int j = 0; j < nbuffersPerFile; ++j)
             diskbufferpool.push_back(new char [SIZE_DISK_BUFFER]);
         supportstringbuffers.push_back(std::unique_ptr<char[]>(new char[MAX_TERM_SIZE + 2]));
     }
-    for (int i = 0; i < files.size(); ++i) {
+    for (int i = 0; i < npartitions; ++i) {
         FileInfo inf;
-        inf.path = files[i];
-        inf.eof = fs::file_size(files[i]) == 0;
-        if (inf.eof)
-            neofs++;
         inf.buffer = new char[SIZE_SEG];
         inf.sizebuffer = 0;
         inf.pivot = 0;
         this->files.push_back(inf);
     }
-    neofs = 0;
-    currentFileIdx = -1;
     compressedbuffers = new std::list<BlockToRead>[files.size()];
     m_files = new std::mutex[files.size()];
     cond_files = new std::condition_variable[files.size()];
@@ -31,9 +25,10 @@ DiskLZ4Reader::DiskLZ4Reader(std::vector<string> &files, int nbuffersPerFile) {
     time_rawreading = boost::chrono::duration<double>::zero();
 
     //Open all files
-    readers = new ifstream[files.size()];
+    reader.open(inputfile);
+    //readers = new ifstream[files.size()];
     for (int i = 0; i < files.size(); ++i) {
-        readers[i].open(files[i]);
+        //readers[i].open(files[i]);
         time_files[i] = boost::chrono::duration<double>::zero();
     }
 
@@ -46,20 +41,25 @@ bool DiskLZ4Reader::availableDiskBuffer() {
 }
 
 bool DiskLZ4Reader::areNewBuffers(const int id) {
-    return !compressedbuffers[id].empty() || files[id].eof;
+    return !compressedbuffers[id].empty() || reader.eof();
 }
 
 void DiskLZ4Reader::run() {
-    while (true) {
+    size_t totalsize = 0;
+    char tmpbuffer[4];
+    reader.read(tmpbuffer, 4);
+    int currentFileIdx = Utils::decode_int(tmpbuffer);
+
+    while (!reader.eof()) {
         //Read from each file in a round-robin fashion until all files are read
-        if (neofs == files.size()) {
-            break;
-        }
+        //if (neofs == files.size()) {
+        //    break;
+        //}
 
         //Move to the next file
-        currentFileIdx = (currentFileIdx + 1) % files.size();
-        if (files[currentFileIdx].eof)
-            continue;
+        //currentFileIdx = (currentFileIdx + 1) % files.size();
+        //if (files[currentFileIdx].eof)
+        //    continue;
 
         //Get a disk buffer
         boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
@@ -73,18 +73,10 @@ void DiskLZ4Reader::run() {
 
         //Read the file and put the content in the disk buffer
         start = boost::chrono::system_clock::now();
-        size_t sizeToBeRead = SIZE_DISK_BUFFER;
-        readers[currentFileIdx].read(buffer, sizeToBeRead);
-        if (readers[currentFileIdx].eof()) {
-            sizeToBeRead = readers[currentFileIdx].gcount();
-            assert(sizeToBeRead <= SIZE_DISK_BUFFER);
-            assert(readers[currentFileIdx].eof());
-            files[currentFileIdx].eof = true;
-            readers[currentFileIdx].close();
-            neofs++;
-            BOOST_LOG_TRIVIAL(debug) << "Finished reading file " <<
-                                     files[currentFileIdx].path;
-        }
+        reader.read(tmpbuffer, 4);
+        size_t sizeToBeRead = Utils::decode_int(tmpbuffer);
+        totalsize += sizeToBeRead + 8;
+        reader.read(buffer, sizeToBeRead);
         time_rawreading += boost::chrono::system_clock::now() - start;
 
         //Put the content of the disk buffer in the blockToRead container
@@ -100,10 +92,15 @@ void DiskLZ4Reader::run() {
         compressedbuffers[currentFileIdx].push_back(b);
         lk2.unlock();
         cond_files[currentFileIdx].notify_one();
+
+        reader.read(tmpbuffer, 4);
+        currentFileIdx = Utils::decode_int(tmpbuffer);
     }
+    reader.close();
+    BOOST_LOG_TRIVIAL(debug) << "Finished reading the input file";
 }
 
-void DiskLZ4Reader::getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
+bool DiskLZ4Reader::getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
         const int id) {
     //Here I have already a lock. First I release the buffer at the front
     if (!compressedbuffers[id].empty()) {
@@ -121,6 +118,7 @@ void DiskLZ4Reader::getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
 
     //Then I wait until a new one is available
     cond_files[id].wait(lk, std::bind(&DiskLZ4Reader::areNewBuffers, this, id));
+    return !compressedbuffers[id].empty();
 }
 
 bool DiskLZ4Reader::uncompressBuffer(const int id) {
@@ -136,8 +134,7 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
 
     if (compressedbuffers[id].front().pivot ==
             compressedbuffers[id].front().sizebuffer) {
-        getNewCompressedBuffer(lk, id);
-        if (compressedbuffers[id].empty())
+        if (!getNewCompressedBuffer(lk, id))
             return false;
     }
 
@@ -145,6 +142,7 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
     size_t sizecomprbuffer = compressedbuffers[id].front().sizebuffer;
     char *comprb = compressedbuffers[id].front().buffer;
     size_t pivot = compressedbuffers[id].front().pivot;
+    assert(comprb != NULL);
 
     //First I need to read the first 21 bytes to read the header
     int token;
@@ -161,7 +159,9 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
         int remsize = sizecomprbuffer - pivot;
         memcpy(header, comprb + pivot, remsize);
 
-        getNewCompressedBuffer(lk, id);
+        if (!getNewCompressedBuffer(lk, id))
+            throw 10;
+
         sizecomprbuffer = compressedbuffers[id].front().sizebuffer;
         comprb = compressedbuffers[id].front().buffer;
         pivot = 0;
@@ -190,7 +190,10 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
         memcpy(tmpbuffer.get(), comprb + pivot, copiedSize);
 
         //Get a new buffer
-        getNewCompressedBuffer(lk, id);
+        if (!getNewCompressedBuffer(lk, id)) {
+            throw 10;
+        }
+
         sizecomprbuffer = compressedbuffers[id].front().sizebuffer;
         comprb = compressedbuffers[id].front().buffer;
         pivot = 0;
@@ -300,7 +303,7 @@ DiskLZ4Reader::~DiskLZ4Reader() {
     delete[] compressedbuffers;
     for (int i = 0; i < diskbufferpool.size(); ++i)
         delete[] diskbufferpool[i];
-    delete[] readers;
+    //delete[] readers;
     for (int i = 0; i < files.size(); ++i)
         delete[] files[i].buffer;
     delete[] m_files;

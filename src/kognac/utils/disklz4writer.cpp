@@ -1,9 +1,9 @@
 #include <kognac/lz4io.h>
 #include <kognac/disklz4writer.h>
 
-DiskLZ4Writer::DiskLZ4Writer(std::vector<string> &files, int nbuffersPerFile) : inputfiles(files) {
+DiskLZ4Writer::DiskLZ4Writer(string file, int npartitions, int nbuffersPerFile) : inputfile(file), npartitions(npartitions) {
     //Create a number of compressed buffers
-    for (int i = 0; i < files.size(); i++) {
+    for (int i = 0; i < npartitions; i++) {
         //Create 10 buffers for each file
         parentbuffers.push_back(new char[SIZE_COMPRESSED_BUFFER * nbuffersPerFile]);
         for (int j = 0; j < nbuffersPerFile; ++j) {
@@ -11,27 +11,20 @@ DiskLZ4Writer::DiskLZ4Writer(std::vector<string> &files, int nbuffersPerFile) : 
         }
     }
 
-    //One uncompressed buffer per file
-    /*for (int i = 0; i < files.size(); ++i) {
-        uncompressedbuffers.push_back(new char[SIZE_SEG]);
-        sizeuncompressedbuffers.push_back(0);
-    }*/
-    fileinfo.resize(files.size());
-
-    streams = new ofstream[files.size()];
-    for (int i = 0; i < files.size(); ++i) {
-        streams[i].open(files[i]);
-    }
+    fileinfo.resize(npartitions);
+    stream.open(file);
     nterminated = 0;
     currentthread = thread(std::bind(&DiskLZ4Writer::run, this));
     //A thread is now running
-    blocksToWrite = new std::list<BlockToWrite>[files.size()];
+    blocksToWrite = new std::list<BlockToWrite>[npartitions];
     addedBlocksToWrite = 0;
     currentWriteFileID = 0;
+
+    time_rawwriting = boost::chrono::duration<double>::zero();
 }
 
 void DiskLZ4Writer::writeByte(const int id, const int value) {
-    assert(id < inputfiles.size());
+    assert(id < npartitions);
     char *buffer = fileinfo[id].buffer;
     if (fileinfo[id].sizebuffer == SIZE_SEG) {
         compressAndQueue(id);
@@ -59,7 +52,7 @@ void DiskLZ4Writer::writeVLong(const int id, const long value) {
 }
 
 void DiskLZ4Writer::writeLong(const int id, const long value) {
-    assert(id < inputfiles.size());
+    assert(id < npartitions);
     char *buffer = fileinfo[id].buffer;
     if (fileinfo[id].sizebuffer + 8 <= SIZE_SEG) {
         Utils::encode_long(buffer, fileinfo[id].sizebuffer, value);
@@ -83,7 +76,7 @@ void DiskLZ4Writer::writeLong(const int id, const long value) {
 void DiskLZ4Writer::writeRawArray(const int id, const char *bytes,
                                   const size_t length) {
     int len = length;
-    assert(id < inputfiles.size());
+    assert(id < npartitions);
     char *buffer = fileinfo[id].buffer;
     if (fileinfo[id].sizebuffer + len <= SIZE_SEG) {
         memcpy(buffer + fileinfo[id].sizebuffer, bytes, len);
@@ -101,7 +94,7 @@ void DiskLZ4Writer::writeRawArray(const int id, const char *bytes,
 }
 
 void DiskLZ4Writer::writeShort(const int id, const int value) {
-    assert(id < inputfiles.size());
+    assert(id < npartitions);
     char *buffer = fileinfo[id].buffer;
     if (fileinfo[id].sizebuffer == SIZE_SEG) {
         compressAndQueue(id);
@@ -198,7 +191,7 @@ void DiskLZ4Writer::compressAndQueue(const int id) {
 }
 
 bool DiskLZ4Writer::areBlocksToWrite() {
-    return addedBlocksToWrite > 0 || nterminated == inputfiles.size();
+    return addedBlocksToWrite > 0 || nterminated == npartitions;
 }
 
 bool DiskLZ4Writer::areAvailableBuffers() {
@@ -209,19 +202,20 @@ void DiskLZ4Writer::run() {
     while (true) {
         std::list<BlockToWrite> blocks;
 
+        auto start = boost::chrono::system_clock::now();
         std::unique_lock<std::mutex> lk(mutexBlockToWrite);
         cvBlockToWrite.wait(lk, std::bind(&DiskLZ4Writer::areBlocksToWrite, this));
+        time_waitingwriting += boost::chrono::system_clock::now() - start;
+
         if (addedBlocksToWrite > 0) {
             //Search the first non-empty file to write
-            int nextid = (currentWriteFileID + 1) % inputfiles.size();
+            int nextid = (currentWriteFileID + 1) % npartitions;
             while (blocksToWrite[nextid].empty()) {
-                nextid = (nextid + 1) % inputfiles.size();
+                nextid = (nextid + 1) % npartitions;
             }
             currentWriteFileID = nextid;
 
             blocksToWrite[currentWriteFileID].swap(blocks);
-            //block = blocksToWrite[currentWriteFileID].front();
-            //blocksToWrite[currentWriteFileID].pop_front();
             addedBlocksToWrite -= blocks.size();
             lk.unlock();
         } else { //Exit...
@@ -229,11 +223,19 @@ void DiskLZ4Writer::run() {
             return;
         }
 
+        start = boost::chrono::system_clock::now();
         auto it = blocks.begin();
         while (it != blocks.end()) {
-            streams[it->idfile].write(it->buffer, it->sizebuffer);
+            BOOST_LOG_TRIVIAL(debug) << "Write FileID: " << it->idfile << " size: " << it->sizebuffer << " totatlsize: " << stream.tellp();
+            char el[4];
+            Utils::encode_int(el, it->idfile);
+            stream.write(el, 4);
+            Utils::encode_int(el, it->sizebuffer);
+            stream.write(el, 4);
+            stream.write(it->buffer, it->sizebuffer);
             it++;
         }
+        time_rawwriting += boost::chrono::system_clock::now() - start;
 
         //Return the buffer so that it can be reused
         unique_lock<std::mutex> lk2(mutexAvailableBuffer);
@@ -250,11 +252,10 @@ void DiskLZ4Writer::run() {
 DiskLZ4Writer::~DiskLZ4Writer() {
     currentthread.join();
 
-    for (int i = 0; i < inputfiles.size(); ++i) {
-        streams[i].close();
-    }
-    delete[] streams;
+    BOOST_LOG_TRIVIAL(debug) << "Time writing all data from disk " << time_rawwriting.count() * 1000 << "ms.";
+    BOOST_LOG_TRIVIAL(debug) << "Time waiting writing " << time_waitingwriting.count() * 1000 << "ms.";
 
+    stream.close();
     for (int i = 0; i < parentbuffers.size(); ++i)
         delete[] parentbuffers[i];
 

@@ -9,6 +9,8 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <boost/chrono.hpp>
+
 using namespace std;
 
 #define SIZE_COMPRESSED_BUFFER SIZE_COMPRESSED_SEG * 1000
@@ -39,8 +41,12 @@ private:
         }
     };
 
-    std::vector<string> inputfiles;
-    std::ofstream *streams;
+    //std::vector<string> inputfiles;
+    const string inputfile;
+    const int npartitions;
+    std::ofstream stream;
+    boost::chrono::duration<double> time_rawwriting;
+    boost::chrono::duration<double> time_waitingwriting;
 
     std::mutex mutexBlockToWrite;
     std::condition_variable cvBlockToWrite;
@@ -73,7 +79,7 @@ private:
     void compressAndQueue(const int id);
 
 public:
-    DiskLZ4Writer(std::vector<string> &files, int nbuffersPerFile);
+    DiskLZ4Writer(string file, int npartitions, int nbuffersPerFile);
 
     void writeByte(const int id, const int value);
 

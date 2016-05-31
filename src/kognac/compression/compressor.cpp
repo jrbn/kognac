@@ -1530,17 +1530,11 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
     params.copyHashes = copyHashes;
     boost::thread *threads = new boost::thread[parallelProcesses - 1];
 
-    //Group the input files tmpfilenames into maxReadingThreads groups
-    std::vector<std::vector<string>> chunks;
-    chunks.resize(maxReadingThreads);
-    for(int i = 0; i < parallelProcesses; ++i) {
-        chunks[i % maxReadingThreads].push_back(tmpFileNames[i]);
-    }
-
     //Init the DiskReaders
     DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
-        readers[i] = new DiskLZ4Reader(chunks[i], 3);
+        readers[i] = new DiskLZ4Reader(tmpFileNames[i],
+                                       parallelProcesses / maxReadingThreads, 3);
     }
 
     BOOST_LOG_TRIVIAL(debug) << "Extract the common terms";
@@ -1566,7 +1560,7 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1].join();
     }
-    for(int i = 0; i < maxReadingThreads; ++i)
+    for (int i = 0; i < maxReadingThreads; ++i)
         delete readers[i];
     delete[] readers;
     delete[] threads;
@@ -1613,12 +1607,18 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
                                                (unsigned int)(memForHashTables / sizeof(long))));
     BOOST_LOG_TRIVIAL(debug) << "Size hash table " << sizeHashTable;
 
+    if (parallelProcesses % maxReadingThreads != 0) {
+        BOOST_LOG_TRIVIAL(error) << "The maximum number of threads must be a multiplier of the reading threads";
+        throw 10;
+    }
+
+
     //Set up the output file names
-    std::vector<std::vector<string>> blocksOutputFiles;
-    blocksOutputFiles.resize(maxReadingThreads);
-    for (int i = 0; i < parallelProcesses; ++i) {
+    //std::vector<std::vector<string>> blocksOutputFiles;
+    //blocksOutputFiles.resize(maxReadingThreads);
+    for (int i = 0; i < maxReadingThreads; ++i) {
         tmpFileNames[i] = kbPath + string("/tmp-") + boost::lexical_cast<string>(i);
-        blocksOutputFiles[i % maxReadingThreads].push_back(tmpFileNames[i]);
+        //blocksOutputFiles[i % maxReadingThreads].push_back(tmpFileNames[i]);
     }
 
     DiskReader **readers = new DiskReader*[maxReadingThreads];
@@ -1627,7 +1627,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     for (int i = 0; i < maxReadingThreads; ++i) {
         readers[i] = new DiskReader(max(2, (int)(parallelProcesses / maxReadingThreads) * 2), &files[i]);
         threadReaders[i] = boost::thread(boost::bind(&DiskReader::run, readers[i]));
-        writers[i] = new DiskLZ4Writer(blocksOutputFiles[i], 3);
+        writers[i] = new DiskLZ4Writer(tmpFileNames[i], parallelProcesses / maxReadingThreads, 3);
     }
 
     ParamsUncompressTriples params;

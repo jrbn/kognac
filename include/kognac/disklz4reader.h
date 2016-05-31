@@ -25,8 +25,6 @@ private:
     };
 
     struct FileInfo {
-        string path;
-        bool eof;
         char *buffer;
         size_t sizebuffer;
         size_t pivot;
@@ -42,12 +40,12 @@ private:
     boost::chrono::duration<double> time_rawreading;
 
     //Used to track status of reading
-    int neofs;
-    int currentFileIdx;
+    //int neofs;
+    //int currentFileIdx;
 
     //Info about the files
     std::vector<FileInfo> files;
-    ifstream *readers;
+    ifstream reader;
     std::mutex *m_files;
     std::condition_variable *cond_files;
     boost::chrono::duration<double> *time_files;
@@ -63,13 +61,13 @@ private:
 
     bool uncompressBuffer(const int id);
 
-    void getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
+    bool getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
                                 const int id);
 
     void run();
 
 public:
-    DiskLZ4Reader(std::vector<string> &files, int nbuffersPerFile);
+    DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerFile);
 
     bool isEOF(const int id);
 
