@@ -32,7 +32,7 @@ private:
 
     //Pool of compressed buffers
     std::list<BlockToRead> *compressedbuffers;
-    //Larger buffers to reade from disk. They are proportional to SIZE_SEG
+    //Larger buffers to read from disk. They are proportional to SIZE_SEG
     std::vector<char*> diskbufferpool;
     std::mutex m_diskbufferpool;
     std::condition_variable cond_diskbufferpool;

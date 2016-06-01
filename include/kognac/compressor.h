@@ -335,11 +335,11 @@ private:
                                            const string outputFile,
                                            const std::vector<string> *boundaries);
 
-    static void sortPartitionsAndAssignCounters(std::vector<string> &inputFiles,
+    static void sortPartitionsAndAssignCounters(string prefixInputFile,
             string dictfile, string outputfile, int partitions,
             long &counter, int parallelProcesses);
 
-    static void sortPartition(std::vector<string> *inputFiles,
+    static void sortPartition(string prefixInputFile,
                               string dictfile, string outputfile, int part,
                               uint64_t *counter, long maxMem);
 
