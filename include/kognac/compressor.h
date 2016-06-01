@@ -325,11 +325,13 @@ private:
     static std::vector<string> getPartitionBoundaries(const string kbdir,
             const int partitions);
 
-    static void rangePartitionFiles(int readingThreads, int nthreads, vector<string> *inputFiles,
-                                    std::vector<string> &outputFiles,
+    static void rangePartitionFiles(int readingThreads,
+                                    int nthreads,
+                                    string prefixInputFiles,
                                     const std::vector<string> &boundaries);
 
-    static void sortRangePartitionedTuples(const string inputPrefix,
+    static void sortRangePartitionedTuples(DiskLZ4Reader *reader,
+                                           int idxReader,
                                            const string outputFile,
                                            const std::vector<string> *boundaries);
 
@@ -410,7 +412,7 @@ protected:
     void mergeCommonTermsMaps(ByteArrayToNumberMap * finalMap,
                               GStringToNumberMap * maps, int nmaps);
 
-    void mergeNotPopularEntries(vector<string> *inputFiles,
+    void mergeNotPopularEntries(string prefixInputFile,
                                 string globalDictOutput, string outputFile2,
                                 long * startCounter, int increment,
                                 int parallelProcesses,
@@ -427,6 +429,10 @@ protected:
 
     static void sortAndDumpToFile(vector<AnnotatedTerm> &vector, string outputFile,
                                   bool removeDuplicates);
+
+    static void sortAndDumpToFile(vector<AnnotatedTerm> &vector,
+                                  DiskLZ4Writer *writer,
+                                  const int id);
 
     void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
 
@@ -445,14 +451,14 @@ protected:
                       int maxReadingThreads,
                       int parallelProcesses,
                       string outputFile,
-                      int *noutputFiles,
+                      //int *noutputFiles,
                       bool removeDuplicates,
                       const long maxSizeToSort, bool sample);
 
     void inmemorysort_seq(DiskLZ4Reader *reader,
+                          DiskLZ4Writer *writer,
                           const int idReader,
                           int idx,
-                          const int incrIdx,
                           const long maxMemPerThread,
                           bool removeDuplicates,
                           string outputFile,
@@ -462,7 +468,7 @@ protected:
                                      const int maxReadingThreads,
                                      const int parallelProcesses,
                                      string * prefixOutputFiles,
-                                     int *noutputfiles,
+                                     //int *noutputfiles,
                                      ByteArrayToNumberMap * map,
                                      bool filterDuplicates,
                                      bool sample);
