@@ -1998,7 +1998,7 @@ void Compressor::immemorysort(string **inputFiles,
                 threads[i - 1] = boost::thread(
                                      boost::bind(
                                          &Compressor::inmemorysort_seq,
-                                         this, reader,
+                                         reader,
                                          writer, i / maxReadingThreads,
                                          i,
                                          maxMemPerThread,

@@ -450,7 +450,7 @@ protected:
     void sortByTripleID(vector<string> *inputFiles, string outputFile,
                         const long maxMemory);
 
-    void immemorysort(string **inputFiles,
+    static void immemorysort(string **inputFiles,
                       int maxReadingThreads,
                       int parallelProcesses,
                       string outputFile,
@@ -458,7 +458,7 @@ protected:
                       bool removeDuplicates,
                       const long maxSizeToSort, bool sample);
 
-    void inmemorysort_seq(DiskLZ4Reader *reader,
+    static void inmemorysort_seq(DiskLZ4Reader *reader,
                           DiskLZ4Writer *writer,
                           const int idReader,
                           int idx,
