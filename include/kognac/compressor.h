@@ -337,14 +337,17 @@ private:
 
     static void sortPartitionsAndAssignCounters(string prefixInputFile,
             string dictfile, string outputfile, int partitions,
-            long &counter, int parallelProcesses);
+            long &counter, int parallelProcesses, int maxReadingThreads);
 
     static void sortPartition(string prefixInputFile,
-                              string dictfile, string outputfile, int part,
+                              string dictfile, DiskLZ4Writer *writer,
+                              int idWriter,
+                              string prefixIntFiles,
+                              int part,
                               uint64_t *counter, long maxMem);
 
     static void assignCountersAndPartByTripleID(long startCounter,
-            string infile, string outfile, int parallelProcesses);
+            DiskLZ4Reader *reader, int idReader, string outfile, int parallelProcesses);
 
     //static void sampleTuples(string input, std::vector<string> *output);
 
@@ -464,15 +467,6 @@ protected:
                           string outputFile,
                           bool sample);
 
-    void sortDictionaryEntriesByText(string **input, const int ndicts,
-                                     const int maxReadingThreads,
-                                     const int parallelProcesses,
-                                     string * prefixOutputFiles,
-                                     //int *noutputfiles,
-                                     ByteArrayToNumberMap * map,
-                                     bool filterDuplicates,
-                                     bool sample);
-
     static unsigned long calculateSizeHashmapCompression();
 
     static unsigned long calculateMaxEntriesHashmapCompression();
@@ -529,6 +523,18 @@ public:
     static std::vector<string> getAllDictFiles(string prefixDict);
 
     ~Compressor();
+
+    //I make it public only for testing purposes
+    static void sortDictionaryEntriesByText(string **input, const int ndicts,
+                                     const int maxReadingThreads,
+                                     const int parallelProcesses,
+                                     string * prefixOutputFiles,
+                                     //int *noutputfiles,
+                                     ByteArrayToNumberMap * map,
+                                     bool filterDuplicates,
+                                     bool sample);
+
+
 };
 
 #endif /* COMPRESSOR_H_ */

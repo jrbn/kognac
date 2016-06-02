@@ -95,12 +95,15 @@ void DiskLZ4Reader::run() {
 
         reader.read(tmpbuffer, 4);
         currentFileIdx = Utils::decode_int(tmpbuffer);
+
+
+        BOOST_LOG_TRIVIAL(debug) << "READING TIME all data from disk " << time_rawreading.count()  << "sec. (last buffer size = " << sizeToBeRead << " Time waiting lock m_diskbufferpool " << time_diskbufferpool.count() << "sec.";
     }
     reader.close();
     BOOST_LOG_TRIVIAL(debug) << "Finished reading the input file";
 
     //Notify all attached files that might be waiting that there is nothing else to read
-    for(int i = 0; i < files.size(); ++i)
+    for (int i = 0; i < files.size(); ++i)
         cond_files[i].notify_one();
 }
 

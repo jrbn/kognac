@@ -51,7 +51,7 @@ private:
     boost::chrono::duration<double> *time_files;
 
     //support buffers for strings
-    std::vector<std::unique_ptr<char[]>> supportstringbuffers;
+    std::vector<std::unique_ptr<char[]> > supportstringbuffers;
 
     std::thread currentthread;
 

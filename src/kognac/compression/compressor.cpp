@@ -1945,12 +1945,19 @@ void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms, string outputFi
 void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms,
                                    DiskLZ4Writer *writer,
                                    const int id) {
+    boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
     std::sort(terms.begin(), terms.end(), AnnotatedTerm::sLess);
+    boost::chrono::duration<double> dur = boost::chrono::system_clock::now() - start;
+    BOOST_LOG_TRIVIAL(debug) << "Time sorting " << terms.size() << " elements was " << dur.count() << "sec.";
+start = boost::chrono::system_clock::now();
     writer->writeLong(id, terms.size());
     for (vector<AnnotatedTerm>::iterator itr = terms.begin(); itr != terms.end();
             ++itr) {
         itr->writeTo(id, writer);
     }
+    dur = boost::chrono::system_clock::now() - start;
+    BOOST_LOG_TRIVIAL(debug) << "Time dumping " << terms.size() << " terms on the writing buffer " << dur.count() << "sec.";
+
 }
 
 void Compressor::immemorysort(string **inputFiles,
@@ -2075,7 +2082,8 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
         sampleFile = new LZ4Writer(sampleFilePath + "-" + to_string(idx) + "-sample");
     }
 
-    BOOST_LOG_TRIVIAL(debug) << "Start immemory_seq method";
+    BOOST_LOG_TRIVIAL(debug) << "Start immemory_seq method. MaxMemPerThread="
+                             << maxMemPerThread;
 
     while (!reader->isEOF(idReader)) {
         AnnotatedTerm t;
@@ -2282,7 +2290,7 @@ void Compressor::rangePartitionFiles(int readThreads, int maxThreads,
     std::vector<string> infiles;
     for (int i = 0; i < readThreads; ++i) {
         string infile = prefixInputFiles + string(".")
-                                       + to_string(i);
+                        + to_string(i);
         readers[i] = new DiskLZ4Reader(infile,
                                        maxThreads / readThreads,
                                        3);
@@ -2318,7 +2326,10 @@ void Compressor::rangePartitionFiles(int readThreads, int maxThreads,
 }
 
 void Compressor::sortPartition(string prefixInputFiles, string dictfile,
-                               string outputfile, int part, uint64_t *counter, long maxMem) {
+                               DiskLZ4Writer *writer,
+                               int idWriter,
+                               string prefixIntFiles,
+                               int part, uint64_t *counter, long maxMem) {
     std::vector<string> filesToSort;
 
     fs::path parentDir = fs::path(prefixInputFiles).parent_path();
@@ -2341,7 +2352,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
         }
     }
 
-    string outputFile = outputfile + "tmp";
+    string outputFile = prefixIntFiles + "tmp";
 
     StringCollection col(128 * 1024 * 1024);
     std::vector<AnnotatedTerm> tuples;
@@ -2382,7 +2393,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
         long counterTerms = -1;
         long counterPairs = 0;
         {
-            LZ4Writer writer(outputfile);
+            //LZ4Writer writer(outputfile);
             LZ4Writer dictWriter(dictfile);
 
             //Write the output
@@ -2399,8 +2410,8 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
                 //Write the output
                 counterPairs++;
                 assert(t.tripleIdAndPosition != -1);
-                writer.writeLong(counterTerms);
-                writer.writeLong(t.tripleIdAndPosition);
+                writer->writeLong(idWriter, counterTerms);
+                writer->writeLong(idWriter, t.tripleIdAndPosition);
             }
             delete[] previousTerm;
         }
@@ -2424,7 +2435,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
         long counterPairs = 0;
         char *previousTerm = new char[MAX_TERM_SIZE + 2];
 
-        std::unique_ptr<LZ4Writer> writer(new LZ4Writer(outputfile));
+        //std::unique_ptr<LZ4Writer> writer(new LZ4Writer(outputfile));
         std::unique_ptr<LZ4Writer> dictWriter(new LZ4Writer(dictfile));
 
         //Write the output
@@ -2442,8 +2453,8 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             //Write the output
             counterPairs++;
             assert(t.tripleIdAndPosition != -1);
-            writer->writeLong(counterTerms);
-            writer->writeLong(t.tripleIdAndPosition);
+            writer->writeLong(idWriter, counterTerms);
+            writer->writeLong(idWriter, t.tripleIdAndPosition);
         }
         delete[] previousTerm;
 
@@ -2458,7 +2469,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
 void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
         string dictfile,
         string outputfile, int partitions,
-        long & counter, int parallelProcesses) {
+        long & counter, int parallelProcesses, int maxReadingThreads) {
 
     std::vector<boost::thread> threads(partitions);
     std::vector<string> outputfiles;
@@ -2466,50 +2477,71 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
     long maxMem = max((long) 128 * 1024 * 1024,
                       (long) (Utils::getSystemMemory() * 0.7)) / partitions;
 
-    //TODO tomorrow. Create n parallel threads, which read from the files but write on custom writers
+    DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        string out = prefixInputFile + "-sortedpart-" + to_string(i);
+        writers[i] = new DiskLZ4Writer(out, partitions / maxReadingThreads, 3);
+        outputfiles.push_back(out);
+    }
 
     for (int i = 0; i < partitions; ++i) {
-        string out = prefixInputFile + "-sortedpart-" + to_string(i);
         string dictpartfile = dictfile + string(".") + to_string(i);
         BOOST_LOG_TRIVIAL(debug) << "Sorting partition " << i;
-
         threads[i] = boost::thread(boost::bind(Compressor::sortPartition,
                                                prefixInputFile, dictpartfile,
-                                               out, i, &counters[i], maxMem));
-        outputfiles.push_back(out);
+                                               writers[i % maxReadingThreads],
+                                               i / maxReadingThreads,
+                                               outputfiles[i % maxReadingThreads] + to_string(i),
+                                               i, &counters[i], maxMem));
     }
     for (int i = 0; i < partitions; ++i) {
         threads[i].join();
     }
 
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        delete writers[i];
+    }
+    delete[] writers;
+
     //Re-read the sorted tuples and write by tripleID
+    DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        readers[i] = new DiskLZ4Reader(outputfiles[i],
+                                       partitions / maxReadingThreads,
+                                       3);
+    }
+
     long startCounter = counter;
     for (int i = 0; i < partitions; ++i) {
-        string infile = outputfiles[i];
         string outfile = outputfile + string(".") + to_string(i);
         threads[i] = boost::thread(boost::bind(
                                        &Compressor::assignCountersAndPartByTripleID,
-                                       startCounter, infile,
+                                       startCounter, readers[i % maxReadingThreads],
+                                       i / maxReadingThreads,
                                        outfile, parallelProcesses));
         startCounter += counters[i];
     }
     for (int i = 0; i < partitions; ++i) {
         threads[i].join();
     }
+
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        delete readers[i];
+        fs::remove(outputfiles[i]);
+    }
+    delete [] readers;
 }
 
 void Compressor::assignCountersAndPartByTripleID(long startCounter,
-        string infile, string outfile, int parallelProcesses) {
-    LZ4Reader r(infile);
-
+        DiskLZ4Reader *r, int idReader, string outfile, int parallelProcesses) {
     LZ4Writer **outputs = new LZ4Writer*[parallelProcesses];
     for (int i = 0; i < parallelProcesses; ++i) {
         outputs[i] = new LZ4Writer(outfile + string(".") + to_string(i));
     }
 
-    while (!r.isEof()) {
-        const long c = r.parseLong();
-        const long tid = r.parseLong();
+    while (!r->isEOF(idReader)) {
+        const long c = r->readLong(idReader);
+        const long tid = r->readLong(idReader);
         const  int idx = (long) (tid >> 2) % parallelProcesses;
         outputs[idx]->writeLong(tid);
         outputs[idx]->writeLong(c + startCounter);
@@ -2519,8 +2551,6 @@ void Compressor::assignCountersAndPartByTripleID(long startCounter,
         delete outputs[i];
     }
     delete[] outputs;
-    fs::remove(infile);
-
 }
 
 void Compressor::mergeNotPopularEntries(string prefixInputFile,
@@ -2547,7 +2577,8 @@ void Compressor::mergeNotPopularEntries(string prefixInputFile,
                                     dictOutput,
                                     outputFile2,
                                     boundaries.size() + 1,
-                                    *startCounter, parallelProcesses);
+                                    *startCounter, parallelProcesses,
+                                    maxReadingThreads);
 }
 
 void Compressor::sortByTripleID(vector<string> *inputFiles, string outputFile,
@@ -2754,12 +2785,10 @@ void Compressor::sortDictionaryEntriesByText(string **input,
     long maxMemAllocate = max((long) (BLOCK_SUPPORT_BUFFER_COMPR * 2),
                               (long) (Utils::getSystemMemory() * 0.70 / ndicts));
     BOOST_LOG_TRIVIAL(debug) << "Sorting dictionary entries for partitions";
-    boost::thread *threads = new boost::thread[ndicts - 1];
 
     BOOST_LOG_TRIVIAL(debug) << "Max memory to use to sort inmemory a number of terms: " << maxMemAllocate << " bytes";
     immemorysort(input, maxReadingThreads, parallelProcesses, prefixOutputFiles[0],
-                 /*&noutputfiles[0],*/ filterDuplicates, maxMemAllocate, sample);
-    delete[] threads;
+                 filterDuplicates, maxMemAllocate, sample);
     BOOST_LOG_TRIVIAL(debug) << "...done";
 }
 
