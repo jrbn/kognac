@@ -2085,13 +2085,18 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
     BOOST_LOG_TRIVIAL(debug) << "Start immemory_seq method. MaxMemPerThread="
                              << maxMemPerThread;
 
+    //long count = 0;
+    int sampleCount = 0;
     while (!reader->isEOF(idReader)) {
         AnnotatedTerm t;
         t.readFrom(idReader, reader);
-        const int r = rand() % 100; //from 0 to 99
-        if (r < 1 && sampleFile) {
-            sampleFile->writeString(t.term, t.size);
-        }
+	if (sampleFile) {
+        	if (sampleCount % 100 == 0) {
+            		sampleFile->writeString(t.term, t.size);
+        	} else {
+			sampleCount++;	
+		}
+	}
 
         if ((bytesAllocated + (sizeof(AnnotatedTerm) * terms.size() * 2))
                 >= maxMemPerThread) {
@@ -2108,6 +2113,10 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
         t.term = supportCollection.addNew((char *) t.term, t.size);
         terms.push_back(t);
         bytesAllocated += t.size;
+	//count++;
+	//if (count % 1000000 == 0) {
+	//	BOOST_LOG_TRIVIAL(debug) << "Added keys " << count << " bytesAllocated " << bytesAllocated;
+	//}
     }
 
     if (terms.size() > 0) {
