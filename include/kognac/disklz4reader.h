@@ -44,6 +44,7 @@ private:
     //int currentFileIdx;
 
     //Info about the files
+    string inputfile;
     std::vector<FileInfo> files;
     ifstream reader;
     std::mutex *m_files;

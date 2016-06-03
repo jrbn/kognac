@@ -939,21 +939,27 @@ void Compressor::assignNumbersToCommonTermsMap(ByteArrayToNumberMap *map,
 }
 
 void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
-    //Read the file in input
-    string in = params.inNames[params.part];
-    fs::path pFile(in);
-    fs::path pNewFile = pFile;
-    pNewFile.replace_extension(to_string(params.itrN));
-    string newFile = pNewFile.string();
     long compressedTriples = 0;
     long compressedTerms = 0;
     long uncompressedTerms = 0;
-    LZ4Reader *uncommonTermsReader = NULL;
+    DiskLZ4Reader *uncommonTermsReader = params.readerUncommonTerms;
+    DiskLZ4Reader *r = params.reader;
+    const int idReader = params.idReader;
 
     long nextTripleId = -1;
     int nextPos = -1;
     long nextTerm = -1;
-    if (params.uncommonTermsFile != NULL) {
+
+    if (!uncommonTermsReader->isEOF(idReader)) {
+        long tripleId = uncommonTermsReader->readLong(idReader);
+        nextTripleId = tripleId >> 2;
+        nextPos = tripleId & 0x3;
+        nextTerm = uncommonTermsReader->readLong(idReader);
+    } else {
+        BOOST_LOG_TRIVIAL(debug) << "No uncommon file is provided";
+    }
+
+    /*if (params.uncommonTermsFile != NULL) {
         uncommonTermsReader = new LZ4Reader(*(params.uncommonTermsFile));
         if (!uncommonTermsReader->isEof()) {
             long tripleId = uncommonTermsReader->parseLong();
@@ -965,171 +971,130 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
         }
     } else {
         BOOST_LOG_TRIVIAL(debug) << "No uncommon file is provided";
-    }
+    }*/
 
     long currentTripleId = params.part;
     int increment = params.parallelProcesses;
 
-    if (fs::exists(pFile) && fs::file_size(pFile) > 0) {
-        LZ4Reader r(pFile.string());
-        LZ4Writer w(newFile);
 
-        long triple[3];
-        char *tTriple = new char[MAX_TERM_SIZE * 3];
-        bool valid[3];
+    long triple[3];
+    char *tTriple = new char[MAX_TERM_SIZE * 3];
+    bool valid[3];
 
-        SimpleTripleWriter **permWriters = new SimpleTripleWriter*[params.nperms];
-        const int nperms = params.nperms;
-        int detailPerms[6];
-        Compressor::parsePermutationSignature(params.signaturePerms, detailPerms);
-        for (int i = 0; i < nperms; ++i) {
-            permWriters[i] = new SimpleTripleWriter(params.permDirs[i],
-                                                    params.prefixOutputFile + to_string(params.part), false);
-        }
-        while (!r.isEof()) {
-            for (int i = 0; i < 3; ++i) {
-                valid[i] = false;
-                int flag = r.parseByte();
-                if (flag == 1) {
-                    //convert number
-                    triple[i] = r.parseLong();
-                    valid[i] = true;
-                } else {
-                    //Match the text against the hashmap
-                    int size;
-                    const char *tTerm = r.parseString(size);
-
-                    if (currentTripleId == nextTripleId && nextPos == i) {
-                        triple[i] = nextTerm;
-                        valid[i] = true;
-                        if (!uncommonTermsReader->isEof()) {
-                            long tripleId = uncommonTermsReader->parseLong();
-                            nextTripleId = tripleId >> 2;
-                            nextPos = tripleId & 0x3;
-                            nextTerm = uncommonTermsReader->parseLong();
-                        }
-                        compressedTerms++;
-                    } else {
-                        bool ok = false;
-                        //Check the hashmap
-                        if (params.commonMap != NULL) {
-                            ByteArrayToNumberMap::iterator itr =
-                                params.commonMap->find(tTerm);
-                            if (itr != params.commonMap->end()) {
-                                triple[i] = itr->second;
-                                valid[i] = true;
-                                ok = true;
-                                compressedTerms++;
-                            }
-                        }
-
-                        if (!ok) {
-                            CompressedByteArrayToNumberMap::iterator itr2 =
-                                params.map->find(tTerm);
-                            if (itr2 != params.map->end()) {
-                                triple[i] = itr2->second;
-                                valid[i] = true;
-                                compressedTerms++;
-                            } else {
-                                memcpy(tTriple + MAX_TERM_SIZE * i, tTerm,
-                                       size);
-                                uncompressedTerms++;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (valid[0] && valid[1] && valid[2]) {
-                for (int i = 0; i < nperms; ++i) {
-                    switch (detailPerms[i]) {
-                    case IDX_SPO:
-                        permWriters[i]->write(triple[0], triple[1], triple[2]);
-                        break;
-                    case IDX_OPS:
-                        permWriters[i]->write(triple[2], triple[1], triple[0]);
-                        break;
-                    case IDX_SOP:
-                        permWriters[i]->write(triple[0], triple[2], triple[1]);
-                        break;
-                    case IDX_OSP:
-                        permWriters[i]->write(triple[2], triple[0], triple[1]);
-                        break;
-                    case IDX_PSO:
-                        permWriters[i]->write(triple[1], triple[0], triple[2]);
-                        break;
-                    case IDX_POS:
-                        permWriters[i]->write(triple[1], triple[2], triple[0]);
-                        break;
-                    }
-                }
-                /*switch (nperms) {
-                case 1:
-                    permWriters[0]->write(triple[0], triple[1], triple[2]);
-                    break;
-                case 2:
-                    permWriters[0]->write(triple[0], triple[1], triple[2]);
-                    permWriters[1]->write(triple[2], triple[1], triple[0]);
-                    break;
-                case 3:
-                    permWriters[0]->write(triple[0], triple[1], triple[2]);
-                    permWriters[1]->write(triple[2], triple[1], triple[0]);
-                    permWriters[2]->write(triple[1], triple[2], triple[0]);
-                    break;
-                case 4:
-                    permWriters[0]->write(triple[0], triple[1], triple[2]);
-                    permWriters[1]->write(triple[2], triple[1], triple[0]);
-                    permWriters[2]->write(triple[0], triple[2], triple[1]);
-                    permWriters[3]->write(triple[2], triple[0], triple[1]);
-                    break;
-                case 6:
-                    permWriters[0]->write(triple[0], triple[1], triple[2]);
-                    permWriters[1]->write(triple[2], triple[1], triple[0]);
-                    permWriters[2]->write(triple[0], triple[2], triple[1]);
-                    permWriters[3]->write(triple[2], triple[0], triple[1]);
-                    permWriters[5]->write(triple[1], triple[0], triple[2]);
-                    permWriters[4]->write(triple[1], triple[2], triple[0]);
-                    break;
-                }*/
-                compressedTriples++;
-            } else {
-                //Write it into the file
-                for (int i = 0; i < 3; ++i) {
-                    if (valid[i]) {
-                        w.writeByte(1);
-                        w.writeLong((long) triple[i]);
-                    } else {
-                        w.writeByte(0);
-                        char *t = tTriple + MAX_TERM_SIZE * i;
-                        w.writeString(t, Utils::decode_short(t) + 2);
-                    }
-                }
-            }
-
-            currentTripleId += increment;
-        }
-
-        for (int i = 0; i < nperms; ++i) {
-            delete permWriters[i];
-        }
-        delete[] permWriters;
-
-        if (uncommonTermsReader != NULL) {
-            if (!(uncommonTermsReader->isEof())) {
-                BOOST_LOG_TRIVIAL(error) << "There are still elements to read in the uncommon file";
-            }
-            delete uncommonTermsReader;
-        }
-        delete[] tTriple;
-    } else {
-        BOOST_LOG_TRIVIAL(warning) << "The file " << in << " does not exist or is empty";
+    SimpleTripleWriter **permWriters = new SimpleTripleWriter*[params.nperms];
+    const int nperms = params.nperms;
+    int detailPerms[6];
+    Compressor::parsePermutationSignature(params.signaturePerms, detailPerms);
+    for (int i = 0; i < nperms; ++i) {
+        permWriters[i] = new SimpleTripleWriter(params.permDirs[i],
+                                                params.prefixOutputFile + to_string(params.part), false);
     }
+    while (!r->isEOF(idReader)) {
+        for (int i = 0; i < 3; ++i) {
+            valid[i] = false;
+            int flag = r->readByte(idReader);
+            if (flag == 1) {
+                //convert number
+                triple[i] = r->readLong(idReader);
+                valid[i] = true;
+            } else {
+                //Match the text against the hashmap
+                int size;
+                const char *tTerm = r->readString(idReader, size);
+
+                if (currentTripleId == nextTripleId && nextPos == i) {
+                    triple[i] = nextTerm;
+                    valid[i] = true;
+                    if (!uncommonTermsReader->isEOF(idReader)) {
+                        long tripleId = uncommonTermsReader->readLong(idReader);
+                        nextTripleId = tripleId >> 2;
+                        nextPos = tripleId & 0x3;
+                        nextTerm = uncommonTermsReader->readLong(idReader);
+                    } else {
+                        BOOST_LOG_TRIVIAL(debug) << "File " << idReader << " is finished";
+                    }
+                    compressedTerms++;
+                } else {
+                    bool ok = false;
+                    //Check the hashmap
+                    if (params.commonMap != NULL) {
+                        ByteArrayToNumberMap::iterator itr =
+                            params.commonMap->find(tTerm);
+                        if (itr != params.commonMap->end()) {
+                            triple[i] = itr->second;
+                            valid[i] = true;
+                            ok = true;
+                            compressedTerms++;
+                        }
+                    }
+                    assert(ok);
+                }
+            }
+        }
+
+        if (valid[0] && valid[1] && valid[2]) {
+            for (int i = 0; i < nperms; ++i) {
+                switch (detailPerms[i]) {
+                case IDX_SPO:
+                    permWriters[i]->write(triple[0], triple[1], triple[2]);
+                    break;
+                case IDX_OPS:
+                    permWriters[i]->write(triple[2], triple[1], triple[0]);
+                    break;
+                case IDX_SOP:
+                    permWriters[i]->write(triple[0], triple[2], triple[1]);
+                    break;
+                case IDX_OSP:
+                    permWriters[i]->write(triple[2], triple[0], triple[1]);
+                    break;
+                case IDX_PSO:
+                    permWriters[i]->write(triple[1], triple[0], triple[2]);
+                    break;
+                case IDX_POS:
+                    permWriters[i]->write(triple[1], triple[2], triple[0]);
+                    break;
+                }
+            }
+            compressedTriples++;
+        } else {
+            /*//Write it into the file
+            for (int i = 0; i < 3; ++i) {
+                if (valid[i]) {
+                    w.writeByte(1);
+                    w.writeLong((long) triple[i]);
+                } else {
+                    w.writeByte(0);
+                    char *t = tTriple + MAX_TERM_SIZE * i;
+                    w.writeString(t, Utils::decode_short(t) + 2);
+                }
+            }*/
+            throw 10; //should never happen
+        }
+        currentTripleId += increment;
+    }
+
+    for (int i = 0; i < nperms; ++i) {
+        delete permWriters[i];
+    }
+    delete[] permWriters;
+
+    if (uncommonTermsReader != NULL) {
+        if (!(uncommonTermsReader->isEOF(idReader))) {
+            BOOST_LOG_TRIVIAL(error) << "There are still elements to read in the uncommon file";
+            throw 10;
+        }
+    }
+    delete[] tTriple;
+    //} else {
+    //    BOOST_LOG_TRIVIAL(warning) << "The file " << in << " does not exist or is empty";
+    //}
 
     BOOST_LOG_TRIVIAL(debug) << "Compressed triples " << compressedTriples << " compressed terms " << compressedTerms << " uncompressed terms " << uncompressedTerms;
 
     //Delete the input file and replace it with a new one
-    fs::remove(pFile);
-    params.inNames[params.part] = newFile;
+    //fs::remove(pFile);
+    //params.inNames[params.part] = newFile; // This operation was necessay since
+    //initially we had a cycle. Not this is not the case anymore...
 }
 
 bool Compressor::isSplittable(string path) {
@@ -1949,7 +1914,7 @@ void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms,
     std::sort(terms.begin(), terms.end(), AnnotatedTerm::sLess);
     boost::chrono::duration<double> dur = boost::chrono::system_clock::now() - start;
     BOOST_LOG_TRIVIAL(debug) << "Time sorting " << terms.size() << " elements was " << dur.count() << "sec.";
-start = boost::chrono::system_clock::now();
+    start = boost::chrono::system_clock::now();
     writer->writeLong(id, terms.size());
     for (vector<AnnotatedTerm>::iterator itr = terms.begin(); itr != terms.end();
             ++itr) {
@@ -2090,13 +2055,13 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
     while (!reader->isEOF(idReader)) {
         AnnotatedTerm t;
         t.readFrom(idReader, reader);
-	if (sampleFile) {
-        	if (sampleCount % 100 == 0) {
-            		sampleFile->writeString(t.term, t.size);
-        	} else {
-			sampleCount++;	
-		}
-	}
+        if (sampleFile) {
+            if (sampleCount % 100 == 0) {
+                sampleFile->writeString(t.term, t.size);
+            } else {
+                sampleCount++;
+            }
+        }
 
         if ((bytesAllocated + (sizeof(AnnotatedTerm) * terms.size() * 2))
                 >= maxMemPerThread) {
@@ -2113,10 +2078,10 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
         t.term = supportCollection.addNew((char *) t.term, t.size);
         terms.push_back(t);
         bytesAllocated += t.size;
-	//count++;
-	//if (count % 1000000 == 0) {
-	//	BOOST_LOG_TRIVIAL(debug) << "Added keys " << count << " bytesAllocated " << bytesAllocated;
-	//}
+        //count++;
+        //if (count % 1000000 == 0) {
+        //  BOOST_LOG_TRIVIAL(debug) << "Added keys " << count << " bytesAllocated " << bytesAllocated;
+        //}
     }
 
     if (terms.size() > 0) {
@@ -2473,6 +2438,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             fs::remove(fs::path(f));
         }
     }
+    writer->setTerminated(idWriter);
 }
 
 void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
@@ -2590,7 +2556,10 @@ void Compressor::mergeNotPopularEntries(string prefixInputFile,
                                     maxReadingThreads);
 }
 
-void Compressor::sortByTripleID(vector<string> *inputFiles, string outputFile,
+void Compressor::sortByTripleID(vector<string> *inputFiles,
+                                DiskLZ4Writer *writer,
+                                const int idWriter,
+                                string tmpfileprefix,
                                 const long maxMemory) {
     //First sort the input files in chunks of x elements
     int idx = 0;
@@ -2605,7 +2574,7 @@ void Compressor::sortByTripleID(vector<string> *inputFiles, string outputFile,
             LZ4Reader *fis = new LZ4Reader(fileName);
             while (!fis->isEof()) {
                 if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
-                    string file = outputFile + string(".") + to_string(idx++);
+                    string file = tmpfileprefix + string(".") + to_string(idx++);
                     sortAndDumpToFile2(pairs, file);
                     filesToMerge.push_back(file);
                     pairs.clear();
@@ -2620,7 +2589,7 @@ void Compressor::sortByTripleID(vector<string> *inputFiles, string outputFile,
         }
 
         if (pairs.size() > 0) {
-            string file = outputFile + string(".") + to_string(idx++);
+            string file = tmpfileprefix + string(".") + to_string(idx++);
             sortAndDumpToFile2(pairs, file);
             filesToMerge.push_back(file);
         }
@@ -2629,12 +2598,13 @@ void Compressor::sortByTripleID(vector<string> *inputFiles, string outputFile,
 
     //Then do a merge sort and write down the results on outputFile
     FileMerger<TriplePair> merger(filesToMerge);
-    LZ4Writer writer(outputFile);
     while (!merger.isEmpty()) {
         TriplePair tp = merger.get();
-        writer.writeLong(tp.tripleIdAndPosition);
-        writer.writeLong(tp.term);
+        //BOOST_LOG_TRIVIAL(debug) << "IDWriter " << idWriter << " " << (tp.tripleIdAndPosition >> 2) << " " << (tp.tripleIdAndPosition & 0x3) << " " << tp.term;
+        writer->writeLong(idWriter, tp.tripleIdAndPosition);
+        writer->writeLong(idWriter, tp.term);
     }
+    writer->setTerminated(idWriter);
 
     //Remove the input files
     for (int i = 0; i < filesToMerge.size(); ++i) {
@@ -2642,105 +2612,81 @@ void Compressor::sortByTripleID(vector<string> *inputFiles, string outputFile,
     }
 }
 
-void Compressor::compressTriples(const int parallelProcesses, const int ndicts,
-                                 string * permDirs, int nperms, int signaturePerms, vector<string> &notSoUncommonFiles,
-                                 vector<string> &finalUncommonFiles, string * tmpFileNames,
-                                 StringCollection * poolForMap, ByteArrayToNumberMap * finalMap) {
-    /*** Compress the triples ***/
-    LZ4Reader **dictFiles = new LZ4Reader*[ndicts];
-    for (int i = 0; i < ndicts; ++i) {
-        if (fs::exists(fs::status(fs::path(notSoUncommonFiles[i])))) {
-            dictFiles[i] = new LZ4Reader(notSoUncommonFiles[i]);
-        } else {
-            dictFiles[i] = NULL;
-        }
-    }
-    int iter = 0;
-    int dictFileProcessed = 0;
-    unsigned long maxMemorySize =
-        calculateSizeHashmapCompression();
-    BOOST_LOG_TRIVIAL(debug) << "Max hashmap size: " << maxMemorySize << " bytes. Initial size of the common map=" << finalMap->size() << " entries.";
+void Compressor::compressTriples(const int maxReadingThreads,
+                                 const int parallelProcesses,
+                                 const int ndicts,
+                                 string * permDirs, int nperms,
+                                 int signaturePerms, vector<string> &notSoUncommonFiles,
+                                 vector<string> &finalUncommonFiles,
+                                 string * tmpFileNames,
+                                 StringCollection * poolForMap,
+                                 ByteArrayToNumberMap * finalMap) {
 
-    CompressedByteArrayToNumberMap uncommonMap;
+    /*** Compress the triples ***/
+    int iter = 0;
     while (areFilesToCompress(parallelProcesses, tmpFileNames)) {
         string prefixOutputFile = "input-" + to_string(iter);
 
-        //Put new terms in the finalMap
-        int idx = 0;
-        while (poolForMap->allocatedBytes() + uncommonMap.size() * 20
-                < maxMemorySize && dictFileProcessed < ndicts) {
-            LZ4Reader *dictFile = dictFiles[idx];
-            if (dictFile != NULL && !dictFile->isEof()) {
-                long compressedTerm = dictFile->parseLong();
-                int sizeTerm;
-                const char *term = dictFile->parseString(sizeTerm);
-                if (uncommonMap.find(term) == uncommonMap.end()) {
-                    const char *newTerm = poolForMap->addNew((char*) term,
-                                          sizeTerm);
-                    uncommonMap.insert(
-                        std::make_pair(newTerm, compressedTerm));
-                } else {
-                    BOOST_LOG_TRIVIAL(error) << "This should not happen! Term " << term
-                                             << " was already being inserted";
-                }
-            } else {
-                BOOST_LOG_TRIVIAL(debug) << "Finished putting in the hashmap the elements in file " << notSoUncommonFiles[idx];
-                if (dictFile != NULL) {
-                    delete dictFile;
-                    fs::remove(fs::path(notSoUncommonFiles[idx]));
-                    dictFiles[idx] = NULL;
-                }
-                dictFileProcessed++;
-                if (dictFileProcessed == ndicts) {
-                    break;
-                }
-            }
-            idx = (idx + 1) % ndicts;
+        DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            readers[i] = new DiskLZ4Reader(tmpFileNames[i],
+                                           parallelProcesses / maxReadingThreads,
+                                           3);
+        }
+        DiskLZ4Reader **uncommonReaders = new DiskLZ4Reader*[maxReadingThreads];
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            uncommonReaders[i] = new DiskLZ4Reader(finalUncommonFiles[i],
+                                                   parallelProcesses / maxReadingThreads,
+                                                   3);
         }
 
-        BOOST_LOG_TRIVIAL(debug) << "Start compression threads... uncommon map size " << uncommonMap.size();
+        BOOST_LOG_TRIVIAL(debug) << "Start compression threads... ";
         boost::thread *threads = new boost::thread[parallelProcesses - 1];
         ParamsNewCompressProcedure p;
         p.permDirs = permDirs;
         p.nperms = nperms;
         p.signaturePerms = signaturePerms;
         p.prefixOutputFile = prefixOutputFile;
-        p.itrN = iter;
-        p.inNames = tmpFileNames;
         p.commonMap = iter == 0 ? finalMap : NULL;
-        p.map = &uncommonMap;
         p.parallelProcesses = parallelProcesses;
-
         for (int i = 1; i < parallelProcesses; ++i) {
             p.part = i;
-            p.uncommonTermsFile = iter == 0 ? &finalUncommonFiles[i] : NULL;
+            p.idReader = i / maxReadingThreads;
+            p.reader = readers[i % maxReadingThreads];
+            p.readerUncommonTerms = uncommonReaders[i % maxReadingThreads];
             threads[i - 1] = boost::thread(
-                                 boost::bind(&Compressor::newCompressTriples, this, p));
+                                 boost::bind(&Compressor::newCompressTriples,
+                                             this, p));
         }
+        p.idReader = 0;
+        p.reader = readers[0];
         p.part = 0;
-        p.uncommonTermsFile = iter == 0 ? &finalUncommonFiles[0] : NULL;
+        p.readerUncommonTerms = uncommonReaders[0];
         newCompressTriples(p);
         for (int i = 1; i < parallelProcesses; ++i) {
             threads[i - 1].join();
         }
         delete[] threads;
 
-        //Clean the map
-        finalMap->clear();
-        uncommonMap.clear();
-        poolForMap->clear();
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            delete readers[i];
+            fs::remove(tmpFileNames[i]);
+            delete uncommonReaders[i];
+        }
+        delete[] readers;
 
         //New iteration!
+        finalMap->clear();
         iter++;
     }
-
-    delete[] dictFiles;
 }
 
 void Compressor::sortFilesByTripleSource(string kbPath,
+        const int maxReadingThreads,
         const int parallelProcesses,
         const int ndicts, vector<string> uncommonFiles,
         vector<string> &outputFiles) {
+
     /*** Sort the files which contain the triple source ***/
     BOOST_LOG_TRIVIAL(debug) << "Sort uncommon triples by triple id";
     vector<vector<string>> inputFinalSorting(parallelProcesses);
@@ -2763,8 +2709,12 @@ void Compressor::sortFilesByTripleSource(string kbPath,
         }
     }
 
-    for (int i = 0; i < parallelProcesses; ++i) {
+    DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
+    for (int i = 0; i < maxReadingThreads; ++i) {
         outputFiles.push_back(kbPath + string("/listUncommonTerms") + to_string(i));
+        writers[i] = new DiskLZ4Writer(outputFiles.back(),
+                                       parallelProcesses / maxReadingThreads,
+                                       3);
     }
 
     boost::thread *threads = new boost::thread[parallelProcesses - 1];
@@ -2773,13 +2723,25 @@ void Compressor::sortFilesByTripleSource(string kbPath,
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1] = boost::thread(
                              boost::bind(&Compressor::sortByTripleID, this,
-                                         &inputFinalSorting[i], outputFiles[i], maxMem));
+                                         &inputFinalSorting[i],
+                                         writers[i % maxReadingThreads],
+                                         i / maxReadingThreads,
+                                         kbPath + string("/listUncommonTerms-tmp") + to_string(i),
+                                         maxMem));
     }
-    sortByTripleID(&inputFinalSorting[0], outputFiles[0], maxMem);
+    sortByTripleID(&inputFinalSorting[0], writers[0], 0,
+                   kbPath + string("/listUncommonTerms-tmp") + to_string(0),
+                   maxMem);
+
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1].join();
     }
     delete[] threads;
+
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        delete writers[i];
+    }
+    delete[] writers;
 }
 
 void Compressor::sortDictionaryEntriesByText(string **input,
@@ -2876,17 +2838,18 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
 
     /*** Sort files by triple source ***/
     vector<string> sortedFiles;
-    sortFilesByTripleSource(kbPath, parallelProcesses, ndicts, uncommonFiles,
-                            sortedFiles);
+    sortFilesByTripleSource(kbPath, maxReadingThreads, parallelProcesses,
+                            ndicts, uncommonFiles, sortedFiles);
 
     /*** Compress the triples ***/
-    compressTriples(parallelProcesses, ndicts, permDirs, nperms, signaturePerms,
+    compressTriples(maxReadingThreads, parallelProcesses, ndicts,
+                    permDirs, nperms, signaturePerms,
                     notSoUncommonFiles, sortedFiles, tmpFileNames,
                     poolForMap, finalMap);
 
     /*** Clean up remaining datastructures ***/
     delete[] counters;
-    for (int i = 0; i < parallelProcesses; ++i) {
+    for (int i = 0; i < maxReadingThreads; ++i) {
         fs::remove(tmpFileNames[i]);
         fs::remove(sortedFiles[i]);
     }

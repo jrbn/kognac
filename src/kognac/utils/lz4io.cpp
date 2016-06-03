@@ -45,6 +45,7 @@ void LZ4Writer::compressAndWriteBuffer() {
     if (!os.good()) {
         BOOST_LOG_TRIVIAL(error) << "Problems with writing the file " << path <<
                                  "good=" << os.good() << " eof=" << os.eof() << " fail=" << os.fail() << " bad=" << os.bad();
+        throw 10;
     }
 
     uncompressedBufferLen = 0;

@@ -1,9 +1,11 @@
 #include <kognac/disklz4reader.h>
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 namespace fs = boost::filesystem;
 
 DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerFile) {
+    this->inputfile = inputfile;
     //Init data structures
     for (int i = 0; i < npartitions; ++i) {
         for (int j = 0; j < nbuffersPerFile; ++j)
@@ -99,6 +101,7 @@ void DiskLZ4Reader::run() {
 
         BOOST_LOG_TRIVIAL(debug) << "READING TIME all data from disk " << time_rawreading.count()  << "sec. Last buffer size = " << sizeToBeRead << " Time diskbufferpool " << time_diskbufferpool.count() << "sec.";
     }
+
     reader.close();
     BOOST_LOG_TRIVIAL(debug) << "Finished reading the input file";
 
@@ -136,13 +139,15 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
     cond_files[id].wait(lk, std::bind(&DiskLZ4Reader::areNewBuffers, this, id));
     time_files[id] += boost::chrono::system_clock::now() - start;
 
-    if (compressedbuffers[id].empty())
+    if (compressedbuffers[id].empty()) {
         return false;
+    }
 
     if (compressedbuffers[id].front().pivot ==
             compressedbuffers[id].front().sizebuffer) {
-        if (!getNewCompressedBuffer(lk, id))
+        if (!getNewCompressedBuffer(lk, id)) {
             return false;
+        }
     }
 
     //Init vars
@@ -307,12 +312,18 @@ DiskLZ4Reader::~DiskLZ4Reader() {
     }
     BOOST_LOG_TRIVIAL(debug) << "Time (avg) waiting locks files " << avg / files.size() << "sec.";
 
+    for (int i = 0; i < files.size(); ++i) {
+        m_files[i].lock();
+        m_files[i].unlock();
+    }
+
     delete[] compressedbuffers;
     for (int i = 0; i < diskbufferpool.size(); ++i)
         delete[] diskbufferpool[i];
     //delete[] readers;
     for (int i = 0; i < files.size(); ++i)
         delete[] files[i].buffer;
+
     delete[] m_files;
     delete[] cond_files;
     delete[] time_files;

@@ -86,11 +86,11 @@ struct ParamsNewCompressProcedure {
     string prefixOutputFile;
     int part;
     int parallelProcesses;
-    int itrN;
-    string *inNames;
+    DiskLZ4Reader *reader;
+    int idReader;
     ByteArrayToNumberMap *commonMap;
-    CompressedByteArrayToNumberMap *map;
-    string *uncommonTermsFile;
+    //string *uncommonTermsFile;
+    DiskLZ4Reader *readerUncommonTerms;
 };
 
 struct ParamsUncompressTriples {
@@ -439,33 +439,44 @@ protected:
 
     void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
 
-    void compressTriples(const int parallelProcesses, const int ndicts,
-                         string * permDirs, int nperms, int signaturePerms, vector<string> &notSoUncommonFiles,
+    void compressTriples(const int maxReadingThreads,
+                         const int parallelProcesses,
+                         const int ndicts,
+                         string * permDirs,
+                         int nperms, int signaturePerms,
+                         vector<string> &notSoUncommonFiles,
                          vector<string> &finalUncommonFiles, string * tmpFileNames,
                          StringCollection * poolForMap, ByteArrayToNumberMap * finalMap);
 
-    void sortFilesByTripleSource(string kbPath, const int parallelProcesses, const int ndicts,
-                                 vector<string> uncommonFiles, vector<string> &finalUncommonFiles);
+    void sortFilesByTripleSource(string kbPath,
+                                 const int maxReadingThreads,
+                                 const int parallelProcesses,
+                                 const int ndicts,
+                                 vector<string> uncommonFiles,
+                                 vector<string> &finalUncommonFiles);
 
-    void sortByTripleID(vector<string> *inputFiles, string outputFile,
+    void sortByTripleID(vector<string> *inputFiles,
+                        DiskLZ4Writer *writer,
+                        const int idWriter,
+                        string tmpfileprefix,
                         const long maxMemory);
 
     static void immemorysort(string **inputFiles,
-                      int maxReadingThreads,
-                      int parallelProcesses,
-                      string outputFile,
-                      //int *noutputFiles,
-                      bool removeDuplicates,
-                      const long maxSizeToSort, bool sample);
+                             int maxReadingThreads,
+                             int parallelProcesses,
+                             string outputFile,
+                             //int *noutputFiles,
+                             bool removeDuplicates,
+                             const long maxSizeToSort, bool sample);
 
     static void inmemorysort_seq(DiskLZ4Reader *reader,
-                          DiskLZ4Writer *writer,
-                          const int idReader,
-                          int idx,
-                          const long maxMemPerThread,
-                          bool removeDuplicates,
-                          string outputFile,
-                          bool sample);
+                                 DiskLZ4Writer *writer,
+                                 const int idReader,
+                                 int idx,
+                                 const long maxMemPerThread,
+                                 bool removeDuplicates,
+                                 string outputFile,
+                                 bool sample);
 
     static unsigned long calculateSizeHashmapCompression();
 
@@ -526,13 +537,13 @@ public:
 
     //I make it public only for testing purposes
     static void sortDictionaryEntriesByText(string **input, const int ndicts,
-                                     const int maxReadingThreads,
-                                     const int parallelProcesses,
-                                     string * prefixOutputFiles,
-                                     //int *noutputfiles,
-                                     ByteArrayToNumberMap * map,
-                                     bool filterDuplicates,
-                                     bool sample);
+                                            const int maxReadingThreads,
+                                            const int parallelProcesses,
+                                            string * prefixOutputFiles,
+                                            //int *noutputfiles,
+                                            ByteArrayToNumberMap * map,
+                                            bool filterDuplicates,
+                                            bool sample);
 
 
 };
