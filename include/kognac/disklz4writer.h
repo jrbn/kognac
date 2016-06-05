@@ -59,6 +59,9 @@ protected:
     std::mutex mutexAvailableBuffer;
     std::condition_variable cvAvailableBuffer;
 
+    std::thread currentthread;
+    bool processStarted;
+
     DiskLZ4Writer(int npartitions, int nbuffersPerFile);
 
 private:
@@ -67,7 +70,6 @@ private:
     std::ofstream stream;
 
 
-    std::thread currentthread;
     int nterminated;
 
     //Store the raw buffers to be written

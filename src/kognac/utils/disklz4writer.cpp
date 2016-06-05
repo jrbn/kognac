@@ -10,26 +10,25 @@ DiskLZ4Writer::DiskLZ4Writer(int npartitions, int nbuffersPerFile) : npartitions
             buffers.push_back(parentbuffers.back() + SIZE_COMPRESSED_BUFFER * j);
         }
     }
+    fileinfo.resize(npartitions);
+    nterminated = 0;
+    blocksToWrite = new std::list<BlockToWrite>[npartitions];
+    addedBlocksToWrite = 0;
+    currentWriteFileID = 0;
+    time_rawwriting = boost::chrono::duration<double>::zero();
+    time_waitingwriting = boost::chrono::duration<double>::zero();
+    time_waitingbuffer = boost::chrono::duration<double>::zero();
+    processStarted = false;
 }
 
 DiskLZ4Writer::DiskLZ4Writer(string file,
                              int npartitions,
                              int nbuffersPerFile) :
     DiskLZ4Writer(npartitions, nbuffersPerFile) {
-
     inputfile = file;
-    fileinfo.resize(npartitions);
     stream.open(file);
-    nterminated = 0;
     currentthread = thread(std::bind(&DiskLZ4Writer::run, this));
-    //A thread is now running
-    blocksToWrite = new std::list<BlockToWrite>[npartitions];
-    addedBlocksToWrite = 0;
-    currentWriteFileID = 0;
-
-    time_rawwriting = boost::chrono::duration<double>::zero();
-    time_waitingwriting = boost::chrono::duration<double>::zero();
-    time_waitingbuffer = boost::chrono::duration<double>::zero();
+    processStarted = true;
 }
 
 void DiskLZ4Writer::writeByte(const int id, const int value) {
@@ -271,7 +270,9 @@ void DiskLZ4Writer::run() {
 }
 
 DiskLZ4Writer::~DiskLZ4Writer() {
-    currentthread.join();
+    if (processStarted)
+        currentthread.join();
+    processStarted = false;
 
     BOOST_LOG_TRIVIAL(debug) << "Time writing all data from disk " << time_rawwriting.count()  << "sec.";
     BOOST_LOG_TRIVIAL(debug) << "Time waiting writing " << time_waitingwriting.count() << "sec.";

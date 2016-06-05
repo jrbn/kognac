@@ -980,6 +980,11 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
                                                 params.prefixOutputFile + to_string(params.part), false);
     }*/
 
+    //This byte is written by the SimpleTripleWriter
+    for (int i = 0; i < nperms; ++i) {
+        writer->writeByte(startIdxWriter + i, 0);
+    }
+
     while (!r->isEOF(idReader)) {
         for (int i = 0; i < 3; ++i) {
             valid[i] = false;
@@ -2627,9 +2632,9 @@ void Compressor::compressTriples(const int maxReadingThreads,
         std::vector<std::vector<string>> chunks;
         chunks.resize(maxReadingThreads);
         //Set up the output files
-        for(int i = 0; i < parallelProcesses; ++i) {
-            for(int j = 0; j < nperms; ++j) {
-                string file = permDirs[j] + prefixOutputFile + to_string(i);
+        for (int i = 0; i < parallelProcesses; ++i) {
+            for (int j = 0; j < nperms; ++j) {
+                string file = permDirs[j] + string("/") + prefixOutputFile + to_string(i);
                 chunks[i % maxReadingThreads].push_back(file);
             }
         }
@@ -2642,8 +2647,6 @@ void Compressor::compressTriples(const int maxReadingThreads,
         BOOST_LOG_TRIVIAL(debug) << "Start compression threads... ";
         boost::thread *threads = new boost::thread[parallelProcesses - 1];
         ParamsNewCompressProcedure p;
-        //p.permDirs = permDirs;
-        //p.prefixOutputFile = prefixOutputFile;
         p.nperms = nperms;
         p.signaturePerms = signaturePerms;
         p.commonMap = iter == 0 ? finalMap : NULL;

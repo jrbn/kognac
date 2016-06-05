@@ -19,7 +19,7 @@ public:
 
     void run();
 
-    ~MultiDiskLZ4Writer();
+    virtual ~MultiDiskLZ4Writer();
 };
 
 #endif

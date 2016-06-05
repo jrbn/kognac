@@ -5,12 +5,14 @@ MultiDiskLZ4Writer::MultiDiskLZ4Writer(std::vector<string> files,
                                        int maxopenedstreams) :
     DiskLZ4Writer(files.size(), nbuffersPerFile),
     maxopenedstreams(maxopenedstreams) {
+    assert(files.size() > 0);
     this->files = files;
     streams = new ofstream[files.size()];
     openedstreams = new bool[files.size()];
     memset(openedstreams, 0, sizeof(bool) * files.size());
     nopenedstreams = 0;
-
+    currentthread = thread(std::bind(&MultiDiskLZ4Writer::run, this));
+    processStarted = true;
 }
 
 void MultiDiskLZ4Writer::run() {
@@ -34,7 +36,7 @@ void MultiDiskLZ4Writer::run() {
             lk.unlock();
         } else { //Exit...
             lk.unlock();
-            return;
+            break;
         }
 
         start = boost::chrono::system_clock::now();
@@ -51,9 +53,11 @@ void MultiDiskLZ4Writer::run() {
                 openedstreams[filetoremove] = false;
                 nopenedstreams--;
             }
+            BOOST_LOG_TRIVIAL(debug) << "Open file " << files[idFile];
             streams[idFile].open(files[idFile], ios_base::ate | ios_base::app);
             openedstreams[idFile] = true;
             historyopenedfiles.push_back(idFile);
+            nopenedstreams++;
         }
         while (it != blocks.end()) {
             assert(it->idfile == idFile);
@@ -79,7 +83,7 @@ void MultiDiskLZ4Writer::run() {
     }
 
     //Close all files
-    for(int i = 0; i < files.size(); ++i) {
+    for (int i = 0; i < files.size(); ++i) {
         if (openedstreams[i]) {
             streams[i].close();
         }
@@ -87,6 +91,8 @@ void MultiDiskLZ4Writer::run() {
 }
 
 MultiDiskLZ4Writer::~MultiDiskLZ4Writer() {
+    currentthread.join();
+    processStarted = false;
     delete[] streams;
     delete[] openedstreams;
 }
