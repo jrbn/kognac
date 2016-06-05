@@ -1,11 +1,14 @@
 #ifndef _DISK_LZ4_WRITER
 #define _DISK_LZ4_WRITER
 
+#include <kognac/lz4io.h>
+
 #include <string>
 #include <vector>
 #include <fstream>
 #include <thread>
 #include <assert.h>
+#include <list>
 #include <mutex>
 #include <condition_variable>
 
@@ -16,7 +19,7 @@ using namespace std;
 #define SIZE_COMPRESSED_BUFFER SIZE_COMPRESSED_SEG * 1000
 
 class DiskLZ4Writer {
-private:
+protected:
     struct BlockToWrite {
         int idfile;
         char *buffer;
@@ -41,41 +44,42 @@ private:
         }
     };
 
-    //std::vector<string> inputfiles;
-    const string inputfile;
-    const int npartitions;
-    std::ofstream stream;
-    boost::chrono::duration<double> time_rawwriting;
-    boost::chrono::duration<double> time_waitingwriting;
-    boost::chrono::duration<double> time_waitingbuffer;
-
     std::mutex mutexBlockToWrite;
     std::condition_variable cvBlockToWrite;
-    std::list<BlockToWrite> *blocksToWrite;
+    boost::chrono::duration<double> time_waitingwriting;
+    boost::chrono::duration<double> time_rawwriting;
+    boost::chrono::duration<double> time_waitingbuffer;
     size_t addedBlocksToWrite;
     int currentWriteFileID;
+    std::list<BlockToWrite> *blocksToWrite;
+
+    const int npartitions;
+
+    std::vector<char*> buffers;
+    std::mutex mutexAvailableBuffer;
+    std::condition_variable cvAvailableBuffer;
+
+    DiskLZ4Writer(int npartitions, int nbuffersPerFile);
+
+private:
+
+    string inputfile;
+    std::ofstream stream;
+
 
     std::thread currentthread;
     int nterminated;
 
     //Store the raw buffers to be written
     std::vector<char*> parentbuffers;
-    std::vector<char*> buffers;
 
-    //std::vector<char*> uncompressedbuffers;
-    //std::vector<int> sizeuncompressedbuffers;
     std::vector<FileInfo> fileinfo;
 
     std::mutex mutexTerminated;
 
-    std::mutex mutexAvailableBuffer;
-    std::condition_variable cvAvailableBuffer;
 
-    bool areBlocksToWrite();
 
     bool areAvailableBuffers();
-
-    void run();
 
     void compressAndQueue(const int id);
 
@@ -96,7 +100,11 @@ public:
 
     void setTerminated(const int id);
 
-    ~DiskLZ4Writer();
+    virtual void run();
+
+    bool areBlocksToWrite();
+
+    virtual ~DiskLZ4Writer();
 };
 
 #endif

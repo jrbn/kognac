@@ -33,6 +33,7 @@
 #include <kognac/diskreader.h>
 #include <kognac/disklz4writer.h>
 #include <kognac/disklz4reader.h>
+#include <kognac/multidisklz4writer.h>
 
 #ifdef COUNTSKETCH
 #include <kognac/CountSketch.h>
@@ -63,7 +64,6 @@ using namespace std;
 
 class SchemaExtractor;
 struct ParamsExtractCommonTermProcedure {
-    //string inputFile;
     DiskLZ4Reader *reader;
     int idReader;
 
@@ -80,26 +80,26 @@ struct ParamsExtractCommonTermProcedure {
 };
 
 struct ParamsNewCompressProcedure {
-    string *permDirs;
+    //string *permDirs;
     int nperms;
     int signaturePerms;
-    string prefixOutputFile;
+    //string prefixOutputFile;
     int part;
     int parallelProcesses;
     DiskLZ4Reader *reader;
     int idReader;
     ByteArrayToNumberMap *commonMap;
-    //string *uncommonTermsFile;
     DiskLZ4Reader *readerUncommonTerms;
+
+    MultiDiskLZ4Writer *writer;
+    int idxWriter;
 };
 
 struct ParamsUncompressTriples {
-    //vector<FileInfo> files;
     DiskReader *reader;
     Hashtable *table1;
     Hashtable *table2;
     Hashtable *table3;
-    //string outFile;
     DiskLZ4Writer *writer;
     int idwriter;
     SchemaExtractor *extractor;

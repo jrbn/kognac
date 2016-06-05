@@ -946,6 +946,12 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
     DiskLZ4Reader *r = params.reader;
     const int idReader = params.idReader;
 
+    const int nperms = params.nperms;
+    MultiDiskLZ4Writer *writer = params.writer;
+    const int startIdxWriter = params.idxWriter;
+    int detailPerms[6];
+    Compressor::parsePermutationSignature(params.signaturePerms, detailPerms);
+
     long nextTripleId = -1;
     int nextPos = -1;
     long nextTerm = -1;
@@ -959,36 +965,21 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
         BOOST_LOG_TRIVIAL(debug) << "No uncommon file is provided";
     }
 
-    /*if (params.uncommonTermsFile != NULL) {
-        uncommonTermsReader = new LZ4Reader(*(params.uncommonTermsFile));
-        if (!uncommonTermsReader->isEof()) {
-            long tripleId = uncommonTermsReader->parseLong();
-            nextTripleId = tripleId >> 2;
-            nextPos = tripleId & 0x3;
-            nextTerm = uncommonTermsReader->parseLong();
-        } else {
-            BOOST_LOG_TRIVIAL(warning) << "The file " << *(params.uncommonTermsFile) << " is empty";
-        }
-    } else {
-        BOOST_LOG_TRIVIAL(debug) << "No uncommon file is provided";
-    }*/
-
     long currentTripleId = params.part;
     int increment = params.parallelProcesses;
-
 
     long triple[3];
     char *tTriple = new char[MAX_TERM_SIZE * 3];
     bool valid[3];
 
+    /*
     SimpleTripleWriter **permWriters = new SimpleTripleWriter*[params.nperms];
     const int nperms = params.nperms;
-    int detailPerms[6];
-    Compressor::parsePermutationSignature(params.signaturePerms, detailPerms);
     for (int i = 0; i < nperms; ++i) {
         permWriters[i] = new SimpleTripleWriter(params.permDirs[i],
                                                 params.prefixOutputFile + to_string(params.part), false);
-    }
+    }*/
+
     while (!r->isEOF(idReader)) {
         for (int i = 0; i < 3; ++i) {
             valid[i] = false;
@@ -1036,47 +1027,47 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
             for (int i = 0; i < nperms; ++i) {
                 switch (detailPerms[i]) {
                 case IDX_SPO:
-                    permWriters[i]->write(triple[0], triple[1], triple[2]);
+                    writer->writeLong(startIdxWriter + i, triple[0]);
+                    writer->writeLong(startIdxWriter + i, triple[1]);
+                    writer->writeLong(startIdxWriter + i, triple[2]);
                     break;
                 case IDX_OPS:
-                    permWriters[i]->write(triple[2], triple[1], triple[0]);
+                    writer->writeLong(startIdxWriter + i, triple[2]);
+                    writer->writeLong(startIdxWriter + i, triple[1]);
+                    writer->writeLong(startIdxWriter + i, triple[0]);
                     break;
                 case IDX_SOP:
-                    permWriters[i]->write(triple[0], triple[2], triple[1]);
+                    writer->writeLong(startIdxWriter + i, triple[0]);
+                    writer->writeLong(startIdxWriter + i, triple[2]);
+                    writer->writeLong(startIdxWriter + i, triple[1]);
                     break;
                 case IDX_OSP:
-                    permWriters[i]->write(triple[2], triple[0], triple[1]);
+                    writer->writeLong(startIdxWriter + i, triple[2]);
+                    writer->writeLong(startIdxWriter + i, triple[0]);
+                    writer->writeLong(startIdxWriter + i, triple[1]);
                     break;
                 case IDX_PSO:
-                    permWriters[i]->write(triple[1], triple[0], triple[2]);
+                    writer->writeLong(startIdxWriter + i, triple[1]);
+                    writer->writeLong(startIdxWriter + i, triple[0]);
+                    writer->writeLong(startIdxWriter + i, triple[2]);
                     break;
                 case IDX_POS:
-                    permWriters[i]->write(triple[1], triple[2], triple[0]);
+                    writer->writeLong(startIdxWriter + i, triple[1]);
+                    writer->writeLong(startIdxWriter + i, triple[2]);
+                    writer->writeLong(startIdxWriter + i, triple[0]);
                     break;
                 }
             }
             compressedTriples++;
         } else {
-            /*//Write it into the file
-            for (int i = 0; i < 3; ++i) {
-                if (valid[i]) {
-                    w.writeByte(1);
-                    w.writeLong((long) triple[i]);
-                } else {
-                    w.writeByte(0);
-                    char *t = tTriple + MAX_TERM_SIZE * i;
-                    w.writeString(t, Utils::decode_short(t) + 2);
-                }
-            }*/
             throw 10; //should never happen
         }
         currentTripleId += increment;
     }
 
     for (int i = 0; i < nperms; ++i) {
-        delete permWriters[i];
+        writer->setTerminated(startIdxWriter + i);
     }
-    delete[] permWriters;
 
     if (uncommonTermsReader != NULL) {
         if (!(uncommonTermsReader->isEOF(idReader))) {
@@ -1085,16 +1076,8 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
         }
     }
     delete[] tTriple;
-    //} else {
-    //    BOOST_LOG_TRIVIAL(warning) << "The file " << in << " does not exist or is empty";
-    //}
 
     BOOST_LOG_TRIVIAL(debug) << "Compressed triples " << compressedTriples << " compressed terms " << compressedTerms << " uncompressed terms " << uncompressedTerms;
-
-    //Delete the input file and replace it with a new one
-    //fs::remove(pFile);
-    //params.inNames[params.part] = newFile; // This operation was necessay since
-    //initially we had a cycle. Not this is not the case anymore...
 }
 
 bool Compressor::isSplittable(string path) {
@@ -2640,13 +2623,28 @@ void Compressor::compressTriples(const int maxReadingThreads,
                                                    3);
         }
 
+        //Set up the output
+        std::vector<std::vector<string>> chunks;
+        //Set up the output files
+        for(int i = 0; i < parallelProcesses; ++i) {
+            for(int j = 0; j < nperms; ++j) {
+                string file = permDirs[j] + prefixOutputFile + to_string(i);
+                chunks[i % maxReadingThreads].push_back(file);
+            }
+        }
+
+        MultiDiskLZ4Writer **writers = new MultiDiskLZ4Writer*[maxReadingThreads];
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            writers[i] = new MultiDiskLZ4Writer(chunks[i], 3, 3);
+        }
+
         BOOST_LOG_TRIVIAL(debug) << "Start compression threads... ";
         boost::thread *threads = new boost::thread[parallelProcesses - 1];
         ParamsNewCompressProcedure p;
-        p.permDirs = permDirs;
+        //p.permDirs = permDirs;
+        //p.prefixOutputFile = prefixOutputFile;
         p.nperms = nperms;
         p.signaturePerms = signaturePerms;
-        p.prefixOutputFile = prefixOutputFile;
         p.commonMap = iter == 0 ? finalMap : NULL;
         p.parallelProcesses = parallelProcesses;
         for (int i = 1; i < parallelProcesses; ++i) {
@@ -2654,6 +2652,8 @@ void Compressor::compressTriples(const int maxReadingThreads,
             p.idReader = i / maxReadingThreads;
             p.reader = readers[i % maxReadingThreads];
             p.readerUncommonTerms = uncommonReaders[i % maxReadingThreads];
+            p.writer = writers[i % maxReadingThreads];
+            p.idxWriter = (i / maxReadingThreads) * nperms;
             threads[i - 1] = boost::thread(
                                  boost::bind(&Compressor::newCompressTriples,
                                              this, p));
@@ -2661,6 +2661,8 @@ void Compressor::compressTriples(const int maxReadingThreads,
         p.idReader = 0;
         p.reader = readers[0];
         p.part = 0;
+        p.writer = writers[0];
+        p.idxWriter = 0;
         p.readerUncommonTerms = uncommonReaders[0];
         newCompressTriples(p);
         for (int i = 1; i < parallelProcesses; ++i) {
@@ -2672,8 +2674,10 @@ void Compressor::compressTriples(const int maxReadingThreads,
             delete readers[i];
             fs::remove(tmpFileNames[i]);
             delete uncommonReaders[i];
+            delete writers[i];
         }
         delete[] readers;
+        delete[] writers;
 
         //New iteration!
         finalMap->clear();

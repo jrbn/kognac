@@ -1,7 +1,7 @@
 #include <kognac/lz4io.h>
 #include <kognac/disklz4writer.h>
 
-DiskLZ4Writer::DiskLZ4Writer(string file, int npartitions, int nbuffersPerFile) : inputfile(file), npartitions(npartitions) {
+DiskLZ4Writer::DiskLZ4Writer(int npartitions, int nbuffersPerFile) : npartitions(npartitions) {
     //Create a number of compressed buffers
     for (int i = 0; i < npartitions; i++) {
         //Create 10 buffers for each file
@@ -10,7 +10,14 @@ DiskLZ4Writer::DiskLZ4Writer(string file, int npartitions, int nbuffersPerFile) 
             buffers.push_back(parentbuffers.back() + SIZE_COMPRESSED_BUFFER * j);
         }
     }
+}
 
+DiskLZ4Writer::DiskLZ4Writer(string file,
+                             int npartitions,
+                             int nbuffersPerFile) :
+    DiskLZ4Writer(npartitions, nbuffersPerFile) {
+
+    inputfile = file;
     fileinfo.resize(npartitions);
     stream.open(file);
     nterminated = 0;
@@ -76,7 +83,7 @@ void DiskLZ4Writer::writeLong(const int id, const long value) {
 }
 
 void DiskLZ4Writer::writeString(const int id, const char *bytes,
-                                  const size_t length) {
+                                const size_t length) {
     writeVLong(id, length);
     writeRawArray(id, bytes, length);
 }
@@ -260,6 +267,7 @@ void DiskLZ4Writer::run() {
         lk2.unlock();
         cvAvailableBuffer.notify_one();
     }
+    stream.close();
 }
 
 DiskLZ4Writer::~DiskLZ4Writer() {
@@ -269,7 +277,6 @@ DiskLZ4Writer::~DiskLZ4Writer() {
     BOOST_LOG_TRIVIAL(debug) << "Time waiting writing " << time_waitingwriting.count() << "sec.";
     BOOST_LOG_TRIVIAL(debug) << "Time waiting buffer " << time_waitingbuffer.count() << "sec.";
 
-    stream.close();
     for (int i = 0; i < parentbuffers.size(); ++i)
         delete[] parentbuffers[i];
 
