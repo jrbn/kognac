@@ -2625,6 +2625,7 @@ void Compressor::compressTriples(const int maxReadingThreads,
 
         //Set up the output
         std::vector<std::vector<string>> chunks;
+        chunks.resize(maxReadingThreads);
         //Set up the output files
         for(int i = 0; i < parallelProcesses; ++i) {
             for(int j = 0; j < nperms; ++j) {
