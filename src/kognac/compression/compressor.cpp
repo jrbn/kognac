@@ -2050,6 +2050,7 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
             if (sampleCount % 100 == 0) {
                 sampleFile->writeString(t.term, t.size);
                 sampleAdded++;
+                sampleCount = 0;
             }
             sampleCount++;
         }
