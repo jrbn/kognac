@@ -471,11 +471,11 @@ protected:
 
     static void inmemorysort_seq(DiskLZ4Reader *reader,
                                  DiskLZ4Writer *writer,
+                                 MultiDiskLZ4Writer *sampleWriter,
                                  const int idReader,
                                  int idx,
                                  const long maxMemPerThread,
                                  bool removeDuplicates,
-                                 string outputFile,
                                  bool sample);
 
     static unsigned long calculateSizeHashmapCompression();

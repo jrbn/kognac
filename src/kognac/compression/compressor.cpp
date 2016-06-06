@@ -1942,31 +1942,45 @@ void Compressor::immemorysort(string **inputFiles,
                                        3);
     }
 
+    std::vector<std::vector<string>> chunks;
+    chunks.resize(maxReadingThreads);
+    MultiDiskLZ4Writer **sampleWriters = new MultiDiskLZ4Writer*[maxReadingThreads];
+    for (int i = 0; i < parallelProcesses; ++i) {
+        chunks[i % maxReadingThreads].push_back(
+            outputFile + "-" + to_string(i) + "-sample");
+    }
+    for (int i = 0; i < maxReadingThreads; ++i) {
+        sampleWriters[i] = new MultiDiskLZ4Writer(chunks[i], 3, 3);
+    }
+
     if (!empty) {
         boost::thread *threads = new boost::thread[parallelProcesses - 1];
         for (int i = 1; i < parallelProcesses; ++i) {
             DiskLZ4Reader *reader = readers[i % maxReadingThreads];
             DiskLZ4Writer *writer = writers[i % maxReadingThreads];
+            MultiDiskLZ4Writer *sampleWriter = sampleWriters[i % maxReadingThreads];
             if (reader) {
                 threads[i - 1] = boost::thread(
                                      boost::bind(
                                          &Compressor::inmemorysort_seq,
                                          reader,
-                                         writer, i / maxReadingThreads,
+                                         writer,
+                                         sampleWriter,
+                                         i / maxReadingThreads,
                                          i,
                                          maxMemPerThread,
                                          removeDuplicates,
-                                         outputFile,
                                          sample));
             }
         }
         DiskLZ4Reader *reader = readers[0];
         DiskLZ4Writer *writer = writers[0];
+        MultiDiskLZ4Writer *sampleWriter = sampleWriters[0];
         if (reader) {
-            inmemorysort_seq(reader, writer, 0, 0,
+            inmemorysort_seq(reader, writer,
+                             sampleWriter, 0, 0,
                              maxMemPerThread,
                              removeDuplicates,
-                             outputFile,
                              sample);
         }
         for (int i = 1; i < parallelProcesses; ++i) {
@@ -1978,9 +1992,11 @@ void Compressor::immemorysort(string **inputFiles,
         if (readers[i])
             delete readers[i];
         delete writers[i];
+        delete sampleWriters[i];
     }
     delete[] readers;
     delete[] writers;
+    delete[] sampleWriters;
 
     /*    //Collect all files
         std::vector<string> files;
@@ -2018,24 +2034,17 @@ void Compressor::immemorysort(string **inputFiles,
 
 void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
                                   DiskLZ4Writer *writer,
+                                  MultiDiskLZ4Writer *sampleWriter,
                                   const int idReader,
                                   int idx,
                                   const long maxMemPerThread,
                                   bool removeDuplicates,
-                                  string sampleFilePath,
                                   bool sample) {
 
     vector<AnnotatedTerm> terms;
     //vector<string> outputfiles;
     StringCollection supportCollection(BLOCK_SUPPORT_BUFFER_COMPR);
     long bytesAllocated = 0;
-
-    LZ4Writer *sampleFile = NULL;
-    if (sample) {
-        string path = sampleFilePath + "-" + to_string(idx) + "-sample";
-        BOOST_LOG_TRIVIAL(debug) << "Opening sample file " << sampleFilePath + "-" + to_string(idx) + "-sample";
-        sampleFile = new LZ4Writer(path);
-    }
 
     BOOST_LOG_TRIVIAL(debug) << "Start immemory_seq method. MaxMemPerThread="
                              << maxMemPerThread;
@@ -2046,9 +2055,9 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
     while (!reader->isEOF(idReader)) {
         AnnotatedTerm t;
         t.readFrom(idReader, reader);
-        if (sampleFile) {
+        if (sample) {
             if (sampleCount % 100 == 0) {
-                sampleFile->writeString(t.term, t.size);
+                sampleWriter->writeString(idReader, t.term, t.size);
                 sampleAdded++;
                 sampleCount = 0;
             }
@@ -2057,11 +2066,7 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
 
         if ((bytesAllocated + (sizeof(AnnotatedTerm) * terms.size() * 2))
                 >= maxMemPerThread) {
-            //string ofile = outputFile + string(".") + to_string(idx);
-            //idx += incrIdx;
-            //sortAndDumpToFile(terms, ofile, removeDuplicates);
             sortAndDumpToFile(terms, writer, idReader);
-            //outputfiles.push_back(ofile);
             terms.clear();
             supportCollection.clear();
             bytesAllocated = 0;
@@ -2070,27 +2075,13 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
         t.term = supportCollection.addNew((char *) t.term, t.size);
         terms.push_back(t);
         bytesAllocated += t.size;
-        //count++;
-        //if (count % 1000000 == 0) {
-        //  BOOST_LOG_TRIVIAL(debug) << "Added keys " << count << " bytesAllocated " << bytesAllocated;
-        //}
     }
 
     if (terms.size() > 0) {
-        //string ofile = outputFile + string(".") + to_string(idx);
-        //sortAndDumpToFile(terms, ofile, removeDuplicates);
         sortAndDumpToFile(terms, writer, idReader);
-        //outputfiles.push_back(ofile);
     }
     writer->setTerminated(idReader);
-
-    //delete fis;
-    //fs::remove(inputFile);
-
-    if (sampleFile != NULL) {
-        BOOST_LOG_TRIVIAL(debug) << "Delete sample file. Added terms " << sampleAdded;
-        delete sampleFile;
-    }
+    sampleWriter->setTerminated(idReader);
 }
 
 /*void Compressor::sampleTuples(string input, std::vector<string> *output) {

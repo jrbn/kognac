@@ -15,7 +15,9 @@ private:
     std::list<int> historyopenedfiles;
 
 public:
-    MultiDiskLZ4Writer(std::vector<string> files, int nbuffersPerFile, int maxopenedstreams);
+    MultiDiskLZ4Writer(std::vector<string> files,
+                       int nbuffersPerFile,
+                       int maxopenedstreams);
 
     void run();
 
