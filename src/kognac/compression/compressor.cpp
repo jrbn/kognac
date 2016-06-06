@@ -2050,9 +2050,8 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
             if (sampleCount % 100 == 0) {
                 sampleFile->writeString(t.term, t.size);
                 sampleAdded++;
-            } else {
-                sampleCount++;
             }
+            sampleCount++;
         }
 
         if ((bytesAllocated + (sizeof(AnnotatedTerm) * terms.size() * 2))
