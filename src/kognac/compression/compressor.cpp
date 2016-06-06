@@ -2032,7 +2032,9 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
 
     LZ4Writer *sampleFile = NULL;
     if (sample) {
-        sampleFile = new LZ4Writer(sampleFilePath + "-" + to_string(idx) + "-sample");
+        string path = sampleFilePath + "-" + to_string(idx) + "-sample";
+        BOOST_LOG_TRIVIAL(debug) << "Opening sample file " << sampleFilePath + "-" + to_string(idx) + "-sample";
+        sampleFile = new LZ4Writer(path);
     }
 
     BOOST_LOG_TRIVIAL(debug) << "Start immemory_seq method. MaxMemPerThread="
@@ -2040,12 +2042,14 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
 
     //long count = 0;
     int sampleCount = 0;
+    int sampleAdded = 0;
     while (!reader->isEOF(idReader)) {
         AnnotatedTerm t;
         t.readFrom(idReader, reader);
         if (sampleFile) {
             if (sampleCount % 100 == 0) {
                 sampleFile->writeString(t.term, t.size);
+                sampleAdded++;
             } else {
                 sampleCount++;
             }
@@ -2084,6 +2088,7 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
     //fs::remove(inputFile);
 
     if (sampleFile != NULL) {
+        BOOST_LOG_TRIVIAL(debug) << "Delete sample file. Added terms " << sampleAdded;
         delete sampleFile;
     }
 }
