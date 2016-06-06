@@ -5,6 +5,7 @@
 
 #include <boost/chrono.hpp>
 
+#include <fstream>
 #include <list>
 #include <vector>
 #include <thread>
