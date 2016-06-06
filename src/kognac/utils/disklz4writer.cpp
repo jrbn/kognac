@@ -254,7 +254,7 @@ void DiskLZ4Writer::run() {
         }
         time_rawwriting += boost::chrono::system_clock::now() - start;
 
-        BOOST_LOG_TRIVIAL(debug) << "WRITING TIME " << time_rawwriting.count() << "ec. Waitingwriting " << time_waitingwriting.count() << "sec." << " Waiting buffer " << time_waitingbuffer.count() << "sec.";
+        //BOOST_LOG_TRIVIAL(debug) << "WRITING TIME " << time_rawwriting.count() << "ec. Waitingwriting " << time_waitingwriting.count() << "sec." << " Waiting buffer " << time_waitingbuffer.count() << "sec.";
 
         //Return the buffer so that it can be reused
         unique_lock<std::mutex> lk2(mutexAvailableBuffer);

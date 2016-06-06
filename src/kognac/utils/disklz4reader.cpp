@@ -99,7 +99,7 @@ void DiskLZ4Reader::run() {
         currentFileIdx = Utils::decode_int(tmpbuffer);
 
 
-        BOOST_LOG_TRIVIAL(debug) << "READING TIME all data from disk " << time_rawreading.count()  << "sec. Last buffer size = " << sizeToBeRead << " Time diskbufferpool " << time_diskbufferpool.count() << "sec.";
+        //BOOST_LOG_TRIVIAL(debug) << "READING TIME all data from disk " << time_rawreading.count()  << "sec. Last buffer size = " << sizeToBeRead << " Time diskbufferpool " << time_diskbufferpool.count() << "sec.";
     }
 
     reader.close();
