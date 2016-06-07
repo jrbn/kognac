@@ -2460,7 +2460,7 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
         delete writers[i];
     }
     delete[] writers;
-    BOOST_LOG_TRIVIAL(debug) << "Finished sorting partitions" << i;
+    BOOST_LOG_TRIVIAL(debug) << "Finished sorting partitions";
 
     //Re-read the sorted tuples and write by tripleID
     DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
