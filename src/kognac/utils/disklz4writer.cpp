@@ -29,6 +29,7 @@ DiskLZ4Writer::DiskLZ4Writer(string file,
     stream.open(file);
     currentthread = thread(std::bind(&DiskLZ4Writer::run, this));
     processStarted = true;
+    startpositions.resize(npartitions);
 }
 
 void DiskLZ4Writer::writeByte(const int id, const int value) {
@@ -238,12 +239,13 @@ void DiskLZ4Writer::run() {
             lk.unlock();
         } else { //Exit...
             lk.unlock();
-            return;
+            break;
         }
 
         start = boost::chrono::system_clock::now();
         auto it = blocks.begin();
         while (it != blocks.end()) {
+            startpositions[it->idfile].push_back(stream.tellp());
             char el[4];
             Utils::encode_int(el, it->idfile);
             stream.write(el, 4);
@@ -267,6 +269,28 @@ void DiskLZ4Writer::run() {
         cvAvailableBuffer.notify_one();
     }
     stream.close();
+
+    //write down the beginning of the blocks for each file
+    auto start = boost::chrono::system_clock::now();
+    stream.open(inputfile + string(".idx"));
+    char buffer[8];
+    Utils::encode_long(buffer, startpositions.size());
+    stream.write(buffer, 8);
+    for (int i = 0; i < startpositions.size(); ++i) {
+        BOOST_LOG_TRIVIAL(debug) << "The number of blocks in partition "
+                                 << i
+                                 << " is " << startpositions[i].size();
+        Utils::encode_long(buffer, startpositions[i].size());
+        stream.write(buffer, 8);
+        for (int j = 0; j < startpositions[i].size(); ++j) {
+            Utils::encode_long(buffer, startpositions[i][j]);
+            stream.write(buffer, 8);
+        }
+    }
+    stream.close();
+    boost::chrono::duration<double> timeidx =
+        boost::chrono::system_clock::now() - start;
+    BOOST_LOG_TRIVIAL(debug) << "Time writing the idx file is " << timeidx.count() << "sec.";
 }
 
 DiskLZ4Writer::~DiskLZ4Writer() {

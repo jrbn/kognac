@@ -68,7 +68,7 @@ private:
 
     string inputfile;
     std::ofstream stream;
-
+    std::vector<std::vector<long>> startpositions;
 
     int nterminated;
 
@@ -78,8 +78,6 @@ private:
     std::vector<FileInfo> fileinfo;
 
     std::mutex mutexTerminated;
-
-
 
     bool areAvailableBuffers();
 

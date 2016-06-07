@@ -2279,6 +2279,7 @@ void Compressor::rangePartitionFiles(int readThreads, int maxThreads,
     }
     for (int i = 0; i < infiles.size(); ++i) {
         fs::remove(infiles[i]);
+        fs::remove(infiles[i] + ".idx");
     }
     delete[] readers;
 }
@@ -2487,6 +2488,7 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
     for (int i = 0; i < maxReadingThreads; ++i) {
         delete readers[i];
         fs::remove(outputfiles[i]);
+        fs::remove(outputfiles[i] + ".idx");
     }
     delete [] readers;
 }
@@ -2673,6 +2675,7 @@ void Compressor::compressTriples(const int maxReadingThreads,
         for (int i = 0; i < maxReadingThreads; ++i) {
             delete readers[i];
             fs::remove(tmpFileNames[i]);
+            fs::remove(tmpFileNames[i] + ".idx");
             delete uncommonReaders[i];
             delete writers[i];
         }
@@ -2793,6 +2796,7 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
     for (int i = 0; i < maxReadingThreads; ++i) {
         delete[] dictFileNames[i];
         fs::remove(fs::path(uncommonDictFileNames[i][0]));
+        fs::remove(fs::path(uncommonDictFileNames[i][0] + string(".idx")));
         delete[] uncommonDictFileNames[i];
     }
     delete[] dictFileNames;
@@ -2854,8 +2858,8 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
     /*** Clean up remaining datastructures ***/
     delete[] counters;
     for (int i = 0; i < maxReadingThreads; ++i) {
-        fs::remove(tmpFileNames[i]);
         fs::remove(sortedFiles[i]);
+        fs::remove(sortedFiles[i] + ".idx");
     }
     delete[] tmpFileNames;
     delete poolForMap;
