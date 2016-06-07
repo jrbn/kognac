@@ -1007,7 +1007,7 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
                         nextPos = tripleId & 0x3;
                         nextTerm = uncommonTermsReader->readLong(idReader);
                     } else {
-                        BOOST_LOG_TRIVIAL(debug) << "File " << idReader << " is finished";
+                        //BOOST_LOG_TRIVIAL(debug) << "File " << idReader << " is finished";
                     }
                     compressedTerms++;
                 } else {
@@ -1874,9 +1874,9 @@ void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms, string outputFi
     if (removeDuplicates) {
         throw 10; //I removed the code below to check for duplicates
     }
-    BOOST_LOG_TRIVIAL(debug) << "Sorting and writing to file " << outputFile << " " << terms.size() << " elements. Removedupl=" << removeDuplicates;
+    //BOOST_LOG_TRIVIAL(debug) << "Sorting and writing to file " << outputFile << " " << terms.size() << " elements. Removedupl=" << removeDuplicates;
     std::sort(terms.begin(), terms.end(), AnnotatedTerm::sLess);
-    BOOST_LOG_TRIVIAL(debug) << "Finished sorting";
+    //BOOST_LOG_TRIVIAL(debug) << "Finished sorting";
     LZ4Writer *outputSegment = new LZ4Writer(outputFile);
     //const char *prevTerm = NULL;
     //int sizePrevTerm = 0;
@@ -1892,7 +1892,7 @@ void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms, string outputFi
         //}
     }
     delete outputSegment;
-    BOOST_LOG_TRIVIAL(debug) << "Written sorted elements: " << countOutput;
+    //BOOST_LOG_TRIVIAL(debug) << "Written sorted elements: " << countOutput;
 }
 
 void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms,
@@ -1901,7 +1901,7 @@ void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms,
     boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
     std::sort(terms.begin(), terms.end(), AnnotatedTerm::sLess);
     boost::chrono::duration<double> dur = boost::chrono::system_clock::now() - start;
-    BOOST_LOG_TRIVIAL(debug) << "Time sorting " << terms.size() << " elements was " << dur.count() << "sec.";
+    //BOOST_LOG_TRIVIAL(debug) << "Time sorting " << terms.size() << " elements was " << dur.count() << "sec.";
     start = boost::chrono::system_clock::now();
     writer->writeLong(id, terms.size());
     for (vector<AnnotatedTerm>::iterator itr = terms.begin(); itr != terms.end();
@@ -1909,7 +1909,7 @@ void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms,
         itr->writeTo(id, writer);
     }
     dur = boost::chrono::system_clock::now() - start;
-    BOOST_LOG_TRIVIAL(debug) << "Time dumping " << terms.size() << " terms on the writing buffer " << dur.count() << "sec.";
+    //BOOST_LOG_TRIVIAL(debug) << "Time dumping " << terms.size() << " terms on the writing buffer " << dur.count() << "sec.";
 
 }
 
@@ -2026,10 +2026,10 @@ void Compressor::immemorysort(string **inputFiles,
         }
         *noutputFiles = files.size();*/
 
-    boost::chrono::duration<double> sec = boost::chrono::system_clock::now()
-                                          - start;
-    BOOST_LOG_TRIVIAL(debug) << "Total sorting time = " << sec.count() * 1000
-                             << " ms";
+    //boost::chrono::duration<double> sec = boost::chrono::system_clock::now()
+    //                                      - start;
+    //BOOST_LOG_TRIVIAL(debug) << "Total sorting time = " << sec.count() * 1000
+    //                         << " ms";
 }
 
 void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
@@ -2046,8 +2046,7 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
     StringCollection supportCollection(BLOCK_SUPPORT_BUFFER_COMPR);
     long bytesAllocated = 0;
 
-    BOOST_LOG_TRIVIAL(debug) << "Start immemory_seq method. MaxMemPerThread="
-                             << maxMemPerThread;
+    //BOOST_LOG_TRIVIAL(debug) << "Start immemory_seq method. MaxMemPerThread=" << maxMemPerThread;
 
     //long count = 0;
     int sampleCount = 0;

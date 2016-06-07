@@ -277,9 +277,9 @@ void DiskLZ4Writer::run() {
     Utils::encode_long(buffer, startpositions.size());
     stream.write(buffer, 8);
     for (int i = 0; i < startpositions.size(); ++i) {
-        BOOST_LOG_TRIVIAL(debug) << "The number of blocks in partition "
-                                 << i
-                                 << " is " << startpositions[i].size();
+        //BOOST_LOG_TRIVIAL(debug) << "The number of blocks in partition "
+        //                         << i
+        //                         << " is " << startpositions[i].size();
         Utils::encode_long(buffer, startpositions[i].size());
         stream.write(buffer, 8);
         for (int j = 0; j < startpositions[i].size(); ++j) {
@@ -290,7 +290,7 @@ void DiskLZ4Writer::run() {
     stream.close();
     boost::chrono::duration<double> timeidx =
         boost::chrono::system_clock::now() - start;
-    BOOST_LOG_TRIVIAL(debug) << "Time writing the idx file is " << timeidx.count() << "sec.";
+    //BOOST_LOG_TRIVIAL(debug) << "Time writing the idx file is " << timeidx.count() << "sec.";
 }
 
 DiskLZ4Writer::~DiskLZ4Writer() {
@@ -298,9 +298,7 @@ DiskLZ4Writer::~DiskLZ4Writer() {
         currentthread.join();
     processStarted = false;
 
-    BOOST_LOG_TRIVIAL(debug) << "Time writing all data from disk " << time_rawwriting.count()  << "sec.";
-    BOOST_LOG_TRIVIAL(debug) << "Time waiting writing " << time_waitingwriting.count() << "sec.";
-    BOOST_LOG_TRIVIAL(debug) << "Time waiting buffer " << time_waitingbuffer.count() << "sec.";
+    BOOST_LOG_TRIVIAL(debug) << "Time writing all data from disk " << time_rawwriting.count()  << "sec. Time waiting writing " << time_waitingwriting.count() << "sec. Time waiting buffer " << time_waitingbuffer.count() << "sec.";
 
     for (int i = 0; i < parentbuffers.size(); ++i)
         delete[] parentbuffers[i];

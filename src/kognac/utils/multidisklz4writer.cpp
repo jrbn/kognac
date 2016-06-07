@@ -53,7 +53,7 @@ void MultiDiskLZ4Writer::run() {
                 openedstreams[filetoremove] = false;
                 nopenedstreams--;
             }
-            BOOST_LOG_TRIVIAL(debug) << "Open file " << files[idFile];
+            //BOOST_LOG_TRIVIAL(debug) << "Open file " << files[idFile];
             streams[idFile].open(files[idFile], ios_base::ate | ios_base::app);
             openedstreams[idFile] = true;
             historyopenedfiles.push_back(idFile);
@@ -66,10 +66,10 @@ void MultiDiskLZ4Writer::run() {
         }
         time_rawwriting += boost::chrono::system_clock::now() - start;
 
-        BOOST_LOG_TRIVIAL(debug) << "WRITING TIME " << time_rawwriting.count()
-                                 << "ec. Waitingwriting " << time_waitingwriting.count()
-                                 << "sec." << " Waiting buffer "
-                                 << time_waitingbuffer.count() << "sec.";
+        //BOOST_LOG_TRIVIAL(debug) << "WRITING TIME " << time_rawwriting.count()
+        //                         << "ec. Waitingwriting " << time_waitingwriting.count()
+        //                         << "sec." << " Waiting buffer "
+        //                         << time_waitingbuffer.count() << "sec.";
 
         //Return the buffer so that it can be reused
         unique_lock<std::mutex> lk2(mutexAvailableBuffer);

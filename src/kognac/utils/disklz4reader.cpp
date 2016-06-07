@@ -62,7 +62,7 @@ DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerF
     idxreader.close();
     boost::chrono::duration<double> timeidx =
         boost::chrono::system_clock::now() - start;
-    BOOST_LOG_TRIVIAL(debug) << "Time reading the idx file is " << timeidx.count() << "sec.";
+    //BOOST_LOG_TRIVIAL(debug) << "Time reading the idx file is " << timeidx.count() << "sec.";
 
     //Launch reading thread
     currentthread = std::thread(std::bind(&DiskLZ4Reader::run, this));
@@ -110,7 +110,7 @@ void DiskLZ4Reader::run() {
         long blocknumber = readBlocks[currentFileIdx];
         assert(blocknumber < beginningBlocks[currentFileIdx].size());
         long position = beginningBlocks[currentFileIdx][blocknumber];
-        BOOST_LOG_TRIVIAL(debug) << "Read block " << blocknumber << " for file " << currentFileIdx << " at position " << position;
+        //BOOST_LOG_TRIVIAL(debug) << "Read block " << blocknumber << " for file " << currentFileIdx << " at position " << position;
 
         reader.seekg(position);
         reader.read(tmpbuffer, 4);
@@ -148,7 +148,7 @@ void DiskLZ4Reader::run() {
     }
 
     reader.close();
-    BOOST_LOG_TRIVIAL(debug) << "Finished reading the input file";
+    //BOOST_LOG_TRIVIAL(debug) << "Finished reading the input file";
 
     //Notify all attached files that might be waiting that there is nothing else to read
     for (int i = 0; i < files.size(); ++i)
