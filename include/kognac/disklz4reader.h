@@ -48,6 +48,8 @@ private:
     string inputfile;
     std::vector<FileInfo> files;
     ifstream reader;
+    std::vector<std::vector<long>> beginningBlocks;
+    std::vector<long> readBlocks;
     std::mutex *m_files;
     std::condition_variable *cond_files;
     boost::chrono::duration<double> *time_files;
