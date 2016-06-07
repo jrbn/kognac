@@ -2445,7 +2445,6 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
 
     for (int i = 0; i < partitions; ++i) {
         string dictpartfile = dictfile + string(".") + to_string(i);
-        BOOST_LOG_TRIVIAL(debug) << "Sorting partition " << i;
         threads[i] = boost::thread(boost::bind(Compressor::sortPartition,
                                                prefixInputFile, dictpartfile,
                                                writers[i % maxReadingThreads],
@@ -2461,6 +2460,7 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
         delete writers[i];
     }
     delete[] writers;
+    BOOST_LOG_TRIVIAL(debug) << "Finished sorting partitions" << i;
 
     //Re-read the sorted tuples and write by tripleID
     DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
@@ -2607,6 +2607,7 @@ void Compressor::compressTriples(const int maxReadingThreads,
                                  StringCollection * poolForMap,
                                  ByteArrayToNumberMap * finalMap) {
 
+    BOOST_LOG_TRIVIAL(debug) << "Start compression threads... ";
     /*** Compress the triples ***/
     int iter = 0;
     while (areFilesToCompress(parallelProcesses, tmpFileNames)) {
@@ -2641,7 +2642,6 @@ void Compressor::compressTriples(const int maxReadingThreads,
             writers[i] = new MultiDiskLZ4Writer(chunks[i], 3, 3);
         }
 
-        BOOST_LOG_TRIVIAL(debug) << "Start compression threads... ";
         boost::thread *threads = new boost::thread[parallelProcesses - 1];
         ParamsNewCompressProcedure p;
         p.nperms = nperms;
@@ -2694,7 +2694,6 @@ void Compressor::sortFilesByTripleSource(string kbPath,
         vector<string> &outputFiles) {
 
     /*** Sort the files which contain the triple source ***/
-    BOOST_LOG_TRIVIAL(debug) << "Sort uncommon triples by triple id";
     vector<vector<string>> inputFinalSorting(parallelProcesses);
 
     assert(uncommonFiles.size() == 1);
@@ -2761,12 +2760,9 @@ void Compressor::sortDictionaryEntriesByText(string **input,
         bool sample) {
     long maxMemAllocate = max((long) (BLOCK_SUPPORT_BUFFER_COMPR * 2),
                               (long) (Utils::getSystemMemory() * 0.70 / ndicts));
-    BOOST_LOG_TRIVIAL(debug) << "Sorting dictionary entries for partitions";
-
     BOOST_LOG_TRIVIAL(debug) << "Max memory to use to sort inmemory a number of terms: " << maxMemAllocate << " bytes";
     immemorysort(input, maxReadingThreads, parallelProcesses, prefixOutputFiles[0],
                  filterDuplicates, maxMemAllocate, sample);
-    BOOST_LOG_TRIVIAL(debug) << "...done";
 }
 
 void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
@@ -2844,15 +2840,18 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
     delete[] uncommonDictionaries;
 
     /*** Sort files by triple source ***/
+    BOOST_LOG_TRIVIAL(debug) << "Sort uncommon triples by triple id";
     vector<string> sortedFiles;
     sortFilesByTripleSource(kbPath, maxReadingThreads, parallelProcesses,
                             ndicts, uncommonFiles, sortedFiles);
+    BOOST_LOG_TRIVIAL(debug) << "... done";
 
     /*** Compress the triples ***/
     compressTriples(maxReadingThreads, parallelProcesses, ndicts,
                     permDirs, nperms, signaturePerms,
                     notSoUncommonFiles, sortedFiles, tmpFileNames,
                     poolForMap, finalMap);
+    BOOST_LOG_TRIVIAL(debug) << "... done";
 
     /*** Clean up remaining datastructures ***/
     delete[] counters;
