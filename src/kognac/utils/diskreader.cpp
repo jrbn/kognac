@@ -77,7 +77,7 @@ void DiskReader::run() {
         }
 
         //Read a file and copy it in buffer
-        BOOST_LOG_TRIVIAL(debug) << "Reading file " << itr->path << " remaining files " << (files->size() - count) << " waiting time " << waitingTime.count() << "sec.";
+        //BOOST_LOG_TRIVIAL(debug) << "Reading file " << itr->path << " remaining files " << (files->size() - count) << " waiting time " << waitingTime.count() << "sec.";
         ifs.open(itr->path);
         assert(itr->start == 0);
         ifs.read(buffer, itr->size);
