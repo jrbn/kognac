@@ -2326,6 +2326,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             t.readFrom(&r);
             if ((bytesAllocated + (sizeof(AnnotatedTerm) * 2 * tuples.size()))
                     >= maxMem) {
+                BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with " tuples.size() << " ...";
                 string ofile = outputFile + string(".") + to_string(idx);
                 idx++;
                 sortAndDumpToFile(tuples, ofile, false);
@@ -2435,6 +2436,7 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
     std::vector<uint64_t> counters(partitions);
     long maxMem = max((long) 128 * 1024 * 1024,
                       (long) (Utils::getSystemMemory() * 0.7)) / partitions;
+    BOOST_LOG_TRIVIAL(debug) << "Max memory per thread " << maxMem;
 
     DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
