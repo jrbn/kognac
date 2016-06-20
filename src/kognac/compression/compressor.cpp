@@ -628,15 +628,18 @@ void Compressor::extractUncommonTerm(const char *term, const int sizeTerm,
     if (map->find(term) == map->end()) {
         //const int partition = Utils::getPartition(term + 2, sizeTerm - 2,
         //                      partitions);
-        AnnotatedTerm t;
-        t.size = sizeTerm;
-        t.term = term;
-        t.tripleIdAndPosition = (long) (tripleId << 2) + (pos & 0x3);
-
         if (!copyHashes) {
-            //Add it into the file
-            t.useHashes = false;
+            //Use the simpler data structure
+            SimplifiedAnnotatedTerm t;
+            t.size = sizeTerm - 2;
+            t.term = term + 2;
+            t.tripleIdAndPosition = (long) (tripleId << 2) + (pos & 0x3);
+            t.writeTo(idwriter, writer);
         } else {
+            AnnotatedTerm t;
+            t.size = sizeTerm;
+            t.term = term;
+            t.tripleIdAndPosition = (long) (tripleId << 2) + (pos & 0x3);
             //Output the three pairs
             t.useHashes = true;
             if (pos == 0) {
@@ -655,10 +658,10 @@ void Compressor::extractUncommonTerm(const char *term, const int sizeTerm,
                 t.hashT1 = hashs;
                 t.hashT2 = hashp;
             }
+            t.writeTo(idwriter, writer);
         }
-        //t.writeTo(udictFile[partition]);
-        t.writeTo(idwriter, writer);
     } else {
+        //What happen here?
     }
 }
 
@@ -1869,19 +1872,22 @@ void Compressor::sortAndDumpToFile2(vector<TriplePair> &pairs,
     }
 }
 
-void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms, string outputFile,
+void Compressor::sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &terms,
+                                   string outputFile,
                                    bool removeDuplicates) {
     if (removeDuplicates) {
         throw 10; //I removed the code below to check for duplicates
     }
     //BOOST_LOG_TRIVIAL(debug) << "Sorting and writing to file " << outputFile << " " << terms.size() << " elements. Removedupl=" << removeDuplicates;
-    std::sort(terms.begin(), terms.end(), AnnotatedTerm::sLess);
+    SimplifiedAnnotatedTermSorter sorter;
+    std::sort(terms.begin(), terms.end(), sorter);
     //BOOST_LOG_TRIVIAL(debug) << "Finished sorting";
     LZ4Writer *outputSegment = new LZ4Writer(outputFile);
     //const char *prevTerm = NULL;
     //int sizePrevTerm = 0;
     long countOutput = 0;
-    for (vector<AnnotatedTerm>::iterator itr = terms.begin(); itr != terms.end();
+    for (vector<SimplifiedAnnotatedTerm>::iterator itr = terms.begin();
+            itr != terms.end();
             ++itr) {
         //if (!removeDuplicates || prevTerm == NULL
         //        || !itr->equals(prevTerm, sizePrevTerm)) {
@@ -1895,16 +1901,18 @@ void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms, string outputFi
     //BOOST_LOG_TRIVIAL(debug) << "Written sorted elements: " << countOutput;
 }
 
-void Compressor::sortAndDumpToFile(vector<AnnotatedTerm> &terms,
+void Compressor::sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &terms,
                                    DiskLZ4Writer *writer,
                                    const int id) {
     boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
-    std::sort(terms.begin(), terms.end(), AnnotatedTerm::sLess);
+    SimplifiedAnnotatedTermSorter sorter;
+    std::sort(terms.begin(), terms.end(), sorter);
     boost::chrono::duration<double> dur = boost::chrono::system_clock::now() - start;
     //BOOST_LOG_TRIVIAL(debug) << "Time sorting " << terms.size() << " elements was " << dur.count() << "sec.";
     start = boost::chrono::system_clock::now();
     writer->writeLong(id, terms.size());
-    for (vector<AnnotatedTerm>::iterator itr = terms.begin(); itr != terms.end();
+    for (vector<SimplifiedAnnotatedTerm>::iterator itr = terms.begin();
+            itr != terms.end();
             ++itr) {
         itr->writeTo(id, writer);
     }
@@ -2041,7 +2049,7 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
                                   bool removeDuplicates,
                                   bool sample) {
 
-    vector<AnnotatedTerm> terms;
+    vector<SimplifiedAnnotatedTerm> terms;
     //vector<string> outputfiles;
     StringCollection supportCollection(BLOCK_SUPPORT_BUFFER_COMPR);
     long bytesAllocated = 0;
@@ -2052,7 +2060,7 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
     int sampleCount = 0;
     int sampleAdded = 0;
     while (!reader->isEOF(idReader)) {
-        AnnotatedTerm t;
+        SimplifiedAnnotatedTerm t;
         t.readFrom(idReader, reader);
         if (sample) {
             if (sampleCount % 100 == 0) {
@@ -2209,7 +2217,7 @@ void Compressor::sortRangePartitionedTuples(DiskLZ4Reader *reader,
             idxFile++;
         }
 
-        AnnotatedTerm t;
+        SimplifiedAnnotatedTerm t;
         t.readFrom(idReader, reader);
         assert(t.tripleIdAndPosition != -1);
         string term = string(t.term + 2, t.size - 2);
@@ -2312,8 +2320,20 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
 
     string outputFile = prefixIntFiles + "tmp";
 
+    //Keep all the prefixes stored in a map to increase the size of URIs we can
+    //keep in main memory
+    StringCollection colprefixes(4 * 1024 * 1024);
+    ByteArraySet prefixset;
+    prefixset.set_empty_key(EMPTY_KEY);
+
+    //ByteArrayToNumberMap prefixmap;
+    //NumberToByteArrayMap prefixmap2;
+    //prefixmap2.set_empty_key(-1);
+    //prefixmap.set_empty_key(EMPTY_KEY);
+    //long prefixid = 0;
+
     StringCollection col(128 * 1024 * 1024);
-    std::vector<AnnotatedTerm> tuples;
+    std::vector<SimplifiedAnnotatedTerm> tuples;
     std::vector<string> sortedFiles;
     long bytesAllocated = 0;
     int idx = 0;
@@ -2322,11 +2342,14 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
         string file = filesToSort[i];
         LZ4Reader r(file);
         while (!r.isEof()) {
-            AnnotatedTerm t;
+            SimplifiedAnnotatedTerm t;
             t.readFrom(&r);
-            if ((bytesAllocated + (sizeof(AnnotatedTerm) * 2 * tuples.size()))
+            assert(t.prefix == NULL);
+            if ((bytesAllocated +
+                    (sizeof(AnnotatedTerm) * 2 * tuples.size()))
                     >= maxMem) {
-                BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with " tuples.size() << " ...";
+                BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
+                                         << tuples.size() << " ...";
                 string ofile = outputFile + string(".") + to_string(idx);
                 idx++;
                 sortAndDumpToFile(tuples, ofile, false);
@@ -2336,17 +2359,48 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
                 bytesAllocated = 0;
             }
 
-            t.term = col.addNew((char *) t.term, t.size);
+            //Check if I can compress the prefix of the string
+            int sizeprefix = 0;
+            const char *prefix = t.getPrefix(sizeprefix);
+            if (sizeprefix > 4) {
+                //Check if the prefix exists in the map
+                char tmpprefix[MAX_TERM_SIZE];
+                Utils::encode_short(tmpprefix, sizeprefix);
+                memcpy(tmpprefix + 2, prefix, sizeprefix);
+                auto itr = prefixset.find((const char*)tmpprefix);
+                if (itr == prefixset.end()) {
+                    t.prefix = prefix;
+                    t.term = col.addNew((char*) t.term +  sizeprefix,
+                                        t.size - sizeprefix);
+                    t.size = t.size - sizeprefix;
+                    const char *prefixtoadd = colprefixes.addNew(tmpprefix,
+                                              sizeprefix + 2);
+                    prefixset.insert(prefixtoadd);
+                    BOOST_LOG_TRIVIAL(debug) << "Added prefix " << string(prefixtoadd + 2, sizeprefix);
+                } else {
+                    t.prefix = *itr;
+                    t.term = col.addNew((char*) t.term +  sizeprefix,
+                                        t.size - sizeprefix);
+                    t.size = t.size - sizeprefix;
+                }
+
+            } else {
+                t.prefix = NULL;
+                t.term = col.addNew((char *) t.term, t.size);
+            }
+
             tuples.push_back(t);
             bytesAllocated += t.size;
         }
         fs::remove(file);
     }
+    BOOST_LOG_TRIVIAL(debug) << "Number of prefixes " << prefixset.size();
 
     if (idx == 0) {
         //All data fit in main memory. Do not need to write it down
         BOOST_LOG_TRIVIAL(debug) << "All terms (" << tuples.size() << ") fit in main memory";
-        std::sort(tuples.begin(), tuples.end(), AnnotatedTerm::sLess);
+        SimplifiedAnnotatedTermSorter sorter;
+        std::sort(tuples.begin(), tuples.end(), sorter);
 
         //The following code is replicated below.
         long counterTerms = -1;
@@ -2356,15 +2410,33 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             LZ4Writer dictWriter(dictfile);
 
             //Write the output
-            char *previousTerm = new char[MAX_TERM_SIZE + 2];
-            Utils::encode_short(previousTerm, 0);
+            const char *prevPrefix = NULL;
+            char *previousTerm = new char[MAX_TERM_SIZE];
+            int previousTermSize = 0;
+
             for (size_t i = 0; i < tuples.size(); ++i) {
-                AnnotatedTerm t = tuples[i];
-                if (!t.equals(previousTerm)) {
+                SimplifiedAnnotatedTerm t = tuples[i];
+                if (!t.equals(previousTerm, previousTermSize, prevPrefix)) {
                     counterTerms++;
+
                     memcpy(previousTerm, t.term, t.size);
+                    prevPrefix = t.prefix;
+                    previousTermSize = t.size;
+
                     dictWriter.writeLong(counterTerms);
-                    dictWriter.writeString(t.term, t.size);
+                    if (t.prefix == NULL) {
+                        dictWriter.writeString(t.term, t.size);
+                    } else {
+                        //Write also the prefix of the string
+                        //auto itr = prefixmap2.find(t.prefixid);
+                        //assert(itr != prefixmap2.end());
+                        int lenprefix = Utils::decode_short(t.prefix);
+                        long len = lenprefix + t.size;
+                        dictWriter.writeVLong(len);
+                        dictWriter.writeRawArray(t.prefix + 2, lenprefix);
+                        dictWriter.writeRawArray(t.term, t.size);
+
+                    }
                 }
                 //Write the output
                 counterPairs++;
@@ -2376,7 +2448,9 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
         }
 
         *counter = counterTerms + 1;
-        BOOST_LOG_TRIVIAL(debug) << "Partition " << part << " contains " << counterPairs << " tuples " << (counterTerms + 1) << " terms";
+        BOOST_LOG_TRIVIAL(debug) << "Partition " << part << " contains " <<
+                                 counterPairs << " tuples " <<
+                                 (counterTerms + 1) << " terms";
         for (auto f : sortedFiles) {
             fs::remove(fs::path(f));
         }

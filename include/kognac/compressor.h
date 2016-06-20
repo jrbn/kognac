@@ -132,6 +132,165 @@ struct TriplePair {
 
 };
 
+struct SimplifiedAnnotatedTerm {
+    const char *term;
+    long tripleIdAndPosition;
+    //int prefixid;
+    const char *prefix;
+    int size;
+
+    SimplifiedAnnotatedTerm() {
+        prefix = NULL;
+        size = 0;
+    }
+
+    void readFrom(const int id, DiskLZ4Reader *reader) {
+        term = reader->readString(id, size);
+        tripleIdAndPosition = reader->readLong(id);
+    }
+
+    void readFrom(LZ4Reader *reader) {
+        term = reader->parseString(size);
+        tripleIdAndPosition = reader->parseLong();
+    }
+
+    void writeTo(LZ4Writer *writer) {
+        if (prefix != NULL) {
+            throw 10; //not implemented
+        } else {
+            writer->writeString(term, size);
+            writer->writeLong(tripleIdAndPosition);
+        }
+    }
+
+    void writeTo(const int id,
+                 DiskLZ4Writer *writer) {
+        if (prefix != NULL) {
+            throw 10; //not implemented
+        } else {
+            writer->writeString(id, term, size);
+            writer->writeLong(id, tripleIdAndPosition);
+        }
+    }
+
+    bool equals(const char *el, const int sizeel, const char *prevPrefix) {
+        if (prevPrefix == prefix && sizeel == size) {
+            return memcmp(el, term, size) == 0;
+        }
+        return false;
+    }
+
+    const char *getPrefix(int &sizeprefix) {
+        if (size > 10 && memcmp(term, "<http://", 8) == 0) {
+            const char *endprefix = (const char *) memchr(term + 8, '#', size - 8);
+            if (endprefix) {
+                sizeprefix = endprefix - term;
+                return term;
+            } else {
+                //Try to get subdomain structures
+                endprefix = (const char *) memchr(term + 8, '/', size - 8);
+                if (endprefix) {
+                    sizeprefix = endprefix - term;
+                    return term;
+                } else {
+                    sizeprefix = 0;
+                    return NULL;
+                }
+            }
+        } else {
+            sizeprefix = 0;
+            return NULL;
+        }
+    }
+};
+
+struct SimplifiedAnnotatedTermSorter {
+    //const NumberToByteArrayMap *prefixMap;
+
+    //SimplifiedAnnotatedTermSorter(const NumberToByteArrayMap *map) :
+    //    prefixMap(map) {
+    //}
+
+    bool operator() (const SimplifiedAnnotatedTerm &i,
+                     const SimplifiedAnnotatedTerm &j) {
+        if (i.prefix == NULL) {
+            if (j.prefix == NULL) {
+                int ret = memcmp(i.term, j.term, min(i.size, j.size));
+                if (ret == 0) {
+                    return (i.size - j.size) < 0;
+                } else {
+                    return ret < 0;
+                }
+            } else {
+                //Get the size of the prefix of j
+                //assert(prefixMap != NULL);
+                //auto itr = prefixMap->find(j.prefixid);
+                //assert(itr != prefixMap->end());
+                const int lenprefix = Utils::decode_short(j.prefix);
+                const int minsize = min(i.size, lenprefix);
+                int ret = memcmp(i.term, j.prefix + 2, minsize);
+                if (ret != 0) {
+                    return ret < 0;
+                } else {
+                    //Check the difference
+                    ret = memcmp(i.term + minsize, j.term,
+                                 min(i.size - minsize, j.size));
+                    if (ret != 0) {
+                        return ret < 0;
+                    } else {
+                        return ((i.size - minsize) - j.size) < 0;
+                    }
+                }
+            }
+        } else {
+            if (j.prefix != NULL) {
+                if (i.prefix == j.prefix) {
+                    int ret = memcmp(i.term, j.term, min(i.size, j.size));
+                    if (ret == 0) {
+                        return (i.size - j.size) < 0;
+                    } else {
+                        return ret < 0;
+                    }
+                } else {
+                    //Compare the two prefixes
+                    //const auto itr1 = prefixMap->find(i.prefixid);
+                    //const auto itr2 = prefixMap->find(j.prefixid);
+                    const int len1 = Utils::decode_short(i.prefix);
+                    const int len2 = Utils::decode_short(j.prefix);
+                    int ret = memcmp(i.prefix + 2, j.prefix + 2,
+                                     min(len1, len2));
+                    if (ret == 0) {
+                        return (len1 - len2) < 0;
+                    } else {
+                        return ret < 0;
+                    }
+
+                }
+            } else {
+                //Get the size of the prefix of i
+                //assert(prefixMap != NULL);
+                //auto itr = prefixMap->find(i.prefixid);
+                //assert(itr != prefixMap->end());
+                const int lenprefix = Utils::decode_short(i.prefix);
+                const int minsize = min(lenprefix, j.size);
+                int ret = memcmp(i.prefix + 2, j.term, minsize);
+                if (ret != 0) {
+                    return ret < 0;
+                } else {
+                    //Check the difference
+                    ret = memcmp(i.term, j.term + minsize,
+                                 min(i.size, j.size - minsize));
+                    if (ret != 0) {
+                        return ret < 0;
+                    } else {
+                        return (i.size - (j.size - minsize)) < 0;
+                    }
+                }
+            }
+        }
+    }
+};
+
 struct AnnotatedTerm {
     const char *term;
     int size;
@@ -430,10 +589,11 @@ protected:
 
     bool areFilesToCompress(int parallelProcesses, string * tmpFileNames);
 
-    static void sortAndDumpToFile(vector<AnnotatedTerm> &vector, string outputFile,
+    static void sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &vector,
+                                  string outputFile,
                                   bool removeDuplicates);
 
-    static void sortAndDumpToFile(vector<AnnotatedTerm> &vector,
+    static void sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &vector,
                                   DiskLZ4Writer *writer,
                                   const int id);
 
