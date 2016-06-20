@@ -202,17 +202,9 @@ struct SimplifiedAnnotatedTerm {
             return NULL;
         }
     }
-};
 
-struct SimplifiedAnnotatedTermSorter {
-    //const NumberToByteArrayMap *prefixMap;
-
-    //SimplifiedAnnotatedTermSorter(const NumberToByteArrayMap *map) :
-    //    prefixMap(map) {
-    //}
-
-    bool operator() (const SimplifiedAnnotatedTerm &i,
-                     const SimplifiedAnnotatedTerm &j) {
+    static bool sless(const SimplifiedAnnotatedTerm &i,
+                      const SimplifiedAnnotatedTerm &j) {
         if (i.prefix == NULL) {
             if (j.prefix == NULL) {
                 int ret = memcmp(i.term, j.term, min(i.size, j.size));
@@ -289,6 +281,11 @@ struct SimplifiedAnnotatedTermSorter {
             }
         }
     }
+
+    bool greater(const SimplifiedAnnotatedTerm &t1) const {
+        return !sless(*this, t1);
+    }
+
 };
 
 struct AnnotatedTerm {

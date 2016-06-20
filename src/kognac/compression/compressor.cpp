@@ -1879,8 +1879,7 @@ void Compressor::sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &terms,
         throw 10; //I removed the code below to check for duplicates
     }
     //BOOST_LOG_TRIVIAL(debug) << "Sorting and writing to file " << outputFile << " " << terms.size() << " elements. Removedupl=" << removeDuplicates;
-    SimplifiedAnnotatedTermSorter sorter;
-    std::sort(terms.begin(), terms.end(), sorter);
+    std::sort(terms.begin(), terms.end(), SimplifiedAnnotatedTerm::sless);
     //BOOST_LOG_TRIVIAL(debug) << "Finished sorting";
     LZ4Writer *outputSegment = new LZ4Writer(outputFile);
     //const char *prevTerm = NULL;
@@ -1905,8 +1904,7 @@ void Compressor::sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &terms,
                                    DiskLZ4Writer *writer,
                                    const int id) {
     boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
-    SimplifiedAnnotatedTermSorter sorter;
-    std::sort(terms.begin(), terms.end(), sorter);
+    std::sort(terms.begin(), terms.end(), SimplifiedAnnotatedTerm::sless);
     boost::chrono::duration<double> dur = boost::chrono::system_clock::now() - start;
     //BOOST_LOG_TRIVIAL(debug) << "Time sorting " << terms.size() << " elements was " << dur.count() << "sec.";
     start = boost::chrono::system_clock::now();
@@ -2399,8 +2397,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
     if (idx == 0) {
         //All data fit in main memory. Do not need to write it down
         BOOST_LOG_TRIVIAL(debug) << "All terms (" << tuples.size() << ") fit in main memory";
-        SimplifiedAnnotatedTermSorter sorter;
-        std::sort(tuples.begin(), tuples.end(), sorter);
+        std::sort(tuples.begin(), tuples.end(), SimplifiedAnnotatedTerm::sless);
 
         //The following code is replicated below.
         long counterTerms = -1;
@@ -2461,38 +2458,58 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             sortedFiles.push_back(ofile);
         }
 
-        BOOST_LOG_TRIVIAL(debug) << "Merge " << sortedFiles.size() << " files in order to sort the partition";
+        BOOST_LOG_TRIVIAL(debug) << "Merge " << sortedFiles.size()
+                                 << " files in order to sort the partition";
+        LZ4Writer dictWriter(dictfile);
+
+        const char *prevPrefix = NULL;
+        char *previousTerm = new char[MAX_TERM_SIZE];
+        int previousTermSize = 0;
+
+        while (sortedFiles.size() >= 4) {
+            //TODO: Reduce the number of files
+        }
 
         //Create a file
         long counterTerms = -1;
         long counterPairs = 0;
-        char *previousTerm = new char[MAX_TERM_SIZE + 2];
-
-        //std::unique_ptr<LZ4Writer> writer(new LZ4Writer(outputfile));
-        std::unique_ptr<LZ4Writer> dictWriter(new LZ4Writer(dictfile));
-
-        //Write the output
-        Utils::encode_short(previousTerm, 0);
         //Sort the files
-        FileMerger<AnnotatedTerm> merger(sortedFiles);
+        FileMerger<SimplifiedAnnotatedTerm> merger(sortedFiles);
         while (!merger.isEmpty()) {
-            AnnotatedTerm t = merger.get();
-            if (!t.equals(previousTerm)) {
+            SimplifiedAnnotatedTerm t = merger.get();
+            if (!t.equals(previousTerm, previousTermSize, prevPrefix)) {
                 counterTerms++;
+
                 memcpy(previousTerm, t.term, t.size);
-                dictWriter->writeLong(counterTerms);
-                dictWriter->writeString(t.term, t.size);
+                prevPrefix = t.prefix;
+                previousTermSize = t.size;
+
+                dictWriter.writeLong(counterTerms);
+                if (t.prefix == NULL) {
+                    dictWriter.writeString(t.term, t.size);
+                } else {
+                    int lenprefix = Utils::decode_short(t.prefix);
+                    long len = lenprefix + t.size;
+                    dictWriter.writeVLong(len);
+                    dictWriter.writeRawArray(t.prefix + 2, lenprefix);
+                    dictWriter.writeRawArray(t.term, t.size);
+
+                }
             }
+
             //Write the output
             counterPairs++;
             assert(t.tripleIdAndPosition != -1);
             writer->writeLong(idWriter, counterTerms);
             writer->writeLong(idWriter, t.tripleIdAndPosition);
         }
-        delete[] previousTerm;
 
+        delete[] previousTerm;
         *counter = counterTerms + 1;
-        BOOST_LOG_TRIVIAL(debug) << "Partition " << part << " contains " << counterPairs << " tuples " << (counterTerms + 1) << " terms";
+        BOOST_LOG_TRIVIAL(debug) << "Partition " << part << " contains "
+                                 << counterPairs << " tuples "
+                                 << (counterTerms + 1) << " terms";
+
         for (auto f : sortedFiles) {
             fs::remove(fs::path(f));
         }
