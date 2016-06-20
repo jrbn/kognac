@@ -2467,8 +2467,35 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
         int previousTermSize = 0;
 
         while (sortedFiles.size() >= 4) {
-            //TODO: Reduce the number of files
+            size_t nfiles = sortedFiles.size();
+            size_t i = 0;
+            while (i + 3 <= nfiles) {
+                //Add files to the batch
+                std::vector<string> batchFiles;
+                batchFiles.push_back(sortedFiles[i]);
+                batchFiles.push_back(sortedFiles[i + 1]);
+                batchFiles.push_back(sortedFiles[i + 2]);
+
+                //Create output file
+                string ofile = outputFile + string(".") + to_string(++idx);
+                LZ4Writer writer(ofile);
+
+                //Merge batch of files
+                FileMerger<SimplifiedAnnotatedTerm> merger(sortedFiles);
+                while (!merger.isEmpty()) {
+                    SimplifiedAnnotatedTerm t = merger.get();
+                    t.writeTo(&writer);
+                }
+
+                //Remove them
+                sortedFiles.push_back(ofile);
+                for (auto f : batchFiles) {
+                    fs::remove(fs::path(f));
+                }
+                i += 3;
+            }
         }
+        BOOST_LOG_TRIVIAL(debug) << "Final merge";
 
         //Create a file
         long counterTerms = -1;
