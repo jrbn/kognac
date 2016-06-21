@@ -2340,7 +2340,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             if ((bytesAllocated +
                     (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
                     >= maxMem) {
-            //if (bytesAllocated > 100000) {
+                //if (bytesAllocated > 100000) {
                 BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
                                          << tuples.size() << " tuples ...";
                 string ofile = outputFile + string(".") + to_string(idx);
@@ -2361,18 +2361,20 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
                 memcpy(tmpprefix.get() + 2, prefix, sizeprefix);
                 auto itr = prefixset.find((const char*)tmpprefix.get());
                 if (itr == prefixset.end()) {
-                    t.prefix = prefix;
                     t.term = col.addNew((char*) t.term +  sizeprefix,
                                         t.size - sizeprefix);
                     t.size = t.size - sizeprefix;
                     const char *prefixtoadd = colprefixes.addNew(tmpprefix.get(),
                                               sizeprefix + 2);
+                    t.prefix = prefixtoadd;
                     prefixset.insert(prefixtoadd);
+                    assert(Utils::decode_short(t.prefix) > 0);
                 } else {
                     t.prefix = *itr;
                     t.term = col.addNew((char*) t.term +  sizeprefix,
                                         t.size - sizeprefix);
                     t.size = t.size - sizeprefix;
+                    assert(Utils::decode_short(t.prefix) > 0);
                 }
 
             } else {
@@ -2414,12 +2416,10 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
                     previousTermSize = t.size;
 
                     dictWriter.writeLong(counterTerms);
+
                     if (t.prefix == NULL) {
                         dictWriter.writeString(t.term, t.size);
                     } else {
-                        //Write also the prefix of the string
-                        //auto itr = prefixmap2.find(t.prefixid);
-                        //assert(itr != prefixmap2.end());
                         int lenprefix = Utils::decode_short(t.prefix);
                         long len = lenprefix + t.size;
                         dictWriter.writeVLong(len);

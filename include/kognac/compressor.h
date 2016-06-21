@@ -255,24 +255,74 @@ struct SimplifiedAnnotatedTerm {
                     }
                 } else {
                     //Compare the two prefixes
-                    //const auto itr1 = prefixMap->find(i.prefixid);
-                    //const auto itr2 = prefixMap->find(j.prefixid);
                     const int len1 = Utils::decode_short(i.prefix);
                     const int len2 = Utils::decode_short(j.prefix);
                     int ret = memcmp(i.prefix + 2, j.prefix + 2,
                                      min(len1, len2));
                     if (ret == 0) {
-                        return (len1 - len2) < 0;
+                        assert(len1 != len2);
+                        if (len1 < len2) {
+                            if (i.size > 0) {
+                                //Must compare the second prefix with the remaining of the first part
+                                int s1 = i.size;
+                                int s2 = len2 - len1;
+                                int mins = min(s1, s2);
+                                ret = memcmp(i.term, j.prefix + 2 + len1, mins);
+                                if (ret == 0) {
+                                    if (s1 < s2) {
+                                        return true;
+                                    } else if (s1 == s2) {
+                                        return j.size > 0;
+                                    } else {
+                                        ret = memcmp(i.term + mins, j.term,
+                                                     min(i.size - mins, j.size));
+                                        if (ret == 0) {
+                                            return ((i.size - mins) - j.size) < 0;
+                                        } else {
+                                            return ret < 0;
+                                        }
+                                    }
+                                } else {
+                                    return ret < 0;
+                                }
+                            } else {
+                                return true;
+                            }
+                        } else {
+                            if (j.size > 0) {
+                                //Must compare the second prefix with the remaining of the first part
+                                int s1 = len1 - len2;
+                                int s2 = j.size;
+                                int mins = min(s1, s2);
+                                ret = memcmp(i.prefix + 2 + len2, j.term, mins);
+                                if (ret == 0) {
+                                    if (s1 > s2) {
+                                        return false;
+                                    } else if (s1 == s2) {
+                                        return false;
+                                    } else {
+                                        ret = memcmp(i.term, j.term + mins,
+                                                     min(i.size, j.size - mins));
+                                        if (ret == 0) {
+                                            return (i.size - (j.size - mins)) < 0;
+                                        } else {
+                                            return ret < 0;
+                                        }
+                                    }
+                                } else {
+                                    return ret < 0;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
                     } else {
                         return ret < 0;
                     }
-
                 }
             } else {
                 //Get the size of the prefix of i
                 //assert(prefixMap != NULL);
-                //auto itr = prefixMap->find(i.prefixid);
-                //assert(itr != prefixMap->end());
                 const int lenprefix = Utils::decode_short(i.prefix);
                 const int minsize = min(lenprefix, j.size);
                 int ret = memcmp(i.prefix + 2, j.term, minsize);
