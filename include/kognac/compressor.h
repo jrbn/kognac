@@ -156,7 +156,11 @@ struct SimplifiedAnnotatedTerm {
 
     void writeTo(LZ4Writer *writer) {
         if (prefix != NULL) {
-            throw 10; //not implemented
+            int lenprefix = Utils::decode_short(prefix);
+            long len = lenprefix + size;
+            writer->writeVLong(len);
+            writer->writeRawArray(prefix + 2, lenprefix);
+            writer->writeRawArray(term, size);
         } else {
             writer->writeString(term, size);
             writer->writeLong(tripleIdAndPosition);
@@ -166,7 +170,11 @@ struct SimplifiedAnnotatedTerm {
     void writeTo(const int id,
                  DiskLZ4Writer *writer) {
         if (prefix != NULL) {
-            throw 10; //not implemented
+            int lenprefix = Utils::decode_short(prefix);
+            long len = lenprefix + size;
+            writer->writeVLong(id, len);
+            writer->writeRawArray(id, prefix + 2, lenprefix);
+            writer->writeRawArray(id, term, size);
         } else {
             writer->writeString(id, term, size);
             writer->writeLong(id, tripleIdAndPosition);

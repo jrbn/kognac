@@ -2218,7 +2218,7 @@ void Compressor::sortRangePartitionedTuples(DiskLZ4Reader *reader,
         SimplifiedAnnotatedTerm t;
         t.readFrom(idReader, reader);
         assert(t.tripleIdAndPosition != -1);
-        string term = string(t.term + 2, t.size - 2);
+        string term = string(t.term, t.size);
         if (!isLast && term > bound) {
             do {
                 delete output;
@@ -2324,12 +2324,6 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
     ByteArraySet prefixset;
     prefixset.set_empty_key(EMPTY_KEY);
 
-    //ByteArrayToNumberMap prefixmap;
-    //NumberToByteArrayMap prefixmap2;
-    //prefixmap2.set_empty_key(-1);
-    //prefixmap.set_empty_key(EMPTY_KEY);
-    //long prefixid = 0;
-
     StringCollection col(128 * 1024 * 1024);
     std::vector<SimplifiedAnnotatedTerm> tuples;
     std::vector<string> sortedFiles;
@@ -2344,10 +2338,10 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             t.readFrom(&r);
             assert(t.prefix == NULL);
             if ((bytesAllocated +
-                    (sizeof(AnnotatedTerm) * 2 * tuples.size()))
+                    (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
                     >= maxMem) {
                 BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
-                                         << tuples.size() << " ...";
+                                         << tuples.size() << " tuples ...";
                 string ofile = outputFile + string(".") + to_string(idx);
                 idx++;
                 sortAndDumpToFile(tuples, ofile, false);
@@ -2374,7 +2368,6 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
                     const char *prefixtoadd = colprefixes.addNew(tmpprefix,
                                               sizeprefix + 2);
                     prefixset.insert(prefixtoadd);
-                    BOOST_LOG_TRIVIAL(debug) << "Added prefix " << string(prefixtoadd + 2, sizeprefix);
                 } else {
                     t.prefix = *itr;
                     t.term = col.addNew((char*) t.term +  sizeprefix,
