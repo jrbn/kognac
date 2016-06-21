@@ -2101,12 +2101,11 @@ void Compressor::inmemorysort_seq(DiskLZ4Reader *reader,
     }
 }*/
 
-bool _sampleLess(const char *c1, const char *c2) {
-    int l1 = Utils::decode_short(c1);
-    int l2 = Utils::decode_short(c2);
-    int ret = memcmp(c1 + 2, c2 + 2, min(l1, l2));
+bool _sampleLess(const std::pair<const char *, int> &c1,
+                 const std::pair<const char *, int> &c2) {
+    int ret = memcmp(c1.first, c2.first, min(c1.second, c2.second));
     if (ret == 0) {
-        return (l1 - l2) < 0;
+        return (c1.second - c2.second) < 0;
     } else {
         return ret < 0;
     }
@@ -2136,7 +2135,7 @@ std::vector<string> Compressor::getPartitionBoundaries(const string kbdir,
     std::sort(sample.begin(), sample.end());*/
 
     //Read all sample strings
-    std::vector<const char *> sample;
+    std::vector<std::pair<const char *, int>> sample;
     StringCollection col(10 * 1024 * 1024);
     fs::directory_iterator end;
     for (fs::directory_iterator dir_iter(kbdir); dir_iter != end;
@@ -2149,7 +2148,7 @@ std::vector<string> Compressor::getPartitionBoundaries(const string kbdir,
                     int size;
                     const char *s = r.parseString(size);
                     const char *news = col.addNew(s, size);
-                    sample.push_back(news);
+                    sample.push_back(std::make_pair(news, size));
                 }
             }
             fs::remove(dir_iter->path().string());
@@ -2168,8 +2167,7 @@ std::vector<string> Compressor::getPartitionBoundaries(const string kbdir,
     for (size_t i = 0; i < sample.size(); ++i) {
         if ((i + 1) % sizePartition == 0 && output.size() < partitions - 1) {
             //Add element in the partition
-            size_t len = Utils::decode_short(sample[i]);
-            string s = string(sample[i] + 2, len);
+            string s = string(sample[i].first, sample[i].second);
             output.push_back(s);
         }
     }
@@ -2329,13 +2327,16 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
     std::vector<string> sortedFiles;
     long bytesAllocated = 0;
     int idx = 0;
+    std::unique_ptr<char[]> tmpprefix = std::unique_ptr<char[]>(new char[MAX_TERM_SIZE]);
+
     //Load all the files until I fill main memory.
     for (int i = 0; i < filesToSort.size(); ++i) {
         string file = filesToSort[i];
-        LZ4Reader r(file);
-        while (!r.isEof()) {
+        BOOST_LOG_TRIVIAL(debug) << "Reading file " << file;
+        std::unique_ptr<LZ4Reader> r = std::unique_ptr<LZ4Reader>(new LZ4Reader(file));
+        while (!r->isEof()) {
             SimplifiedAnnotatedTerm t;
-            t.readFrom(&r);
+            t.readFrom(r.get());
             assert(t.prefix == NULL);
             if ((bytesAllocated +
                     (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
@@ -2356,16 +2357,15 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             const char *prefix = t.getPrefix(sizeprefix);
             if (sizeprefix > 4) {
                 //Check if the prefix exists in the map
-                char tmpprefix[MAX_TERM_SIZE];
-                Utils::encode_short(tmpprefix, sizeprefix);
-                memcpy(tmpprefix + 2, prefix, sizeprefix);
-                auto itr = prefixset.find((const char*)tmpprefix);
+                Utils::encode_short(tmpprefix.get(), sizeprefix);
+                memcpy(tmpprefix.get() + 2, prefix, sizeprefix);
+                auto itr = prefixset.find((const char*)tmpprefix.get());
                 if (itr == prefixset.end()) {
                     t.prefix = prefix;
                     t.term = col.addNew((char*) t.term +  sizeprefix,
                                         t.size - sizeprefix);
                     t.size = t.size - sizeprefix;
-                    const char *prefixtoadd = colprefixes.addNew(tmpprefix,
+                    const char *prefixtoadd = colprefixes.addNew(tmpprefix.get(),
                                               sizeprefix + 2);
                     prefixset.insert(prefixtoadd);
                 } else {
