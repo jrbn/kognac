@@ -2332,7 +2332,6 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
     //Load all the files until I fill main memory.
     for (int i = 0; i < filesToSort.size(); ++i) {
         string file = filesToSort[i];
-        BOOST_LOG_TRIVIAL(debug) << "Reading file " << file;
         std::unique_ptr<LZ4Reader> r = std::unique_ptr<LZ4Reader>(new LZ4Reader(file));
         while (!r->isEof()) {
             SimplifiedAnnotatedTerm t;
@@ -2341,6 +2340,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             if ((bytesAllocated +
                     (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
                     >= maxMem) {
+            //if (bytesAllocated > 100000) {
                 BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
                                          << tuples.size() << " tuples ...";
                 string ofile = outputFile + string(".") + to_string(idx);
@@ -2453,50 +2453,48 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
 
         BOOST_LOG_TRIVIAL(debug) << "Merge " << sortedFiles.size()
                                  << " files in order to sort the partition";
-        LZ4Writer dictWriter(dictfile);
-
-        const char *prevPrefix = NULL;
-        char *previousTerm = new char[MAX_TERM_SIZE];
-        int previousTermSize = 0;
 
         while (sortedFiles.size() >= 4) {
-            size_t nfiles = sortedFiles.size();
-            size_t i = 0;
-            while (i + 3 <= nfiles) {
-                //Add files to the batch
-                std::vector<string> batchFiles;
-                batchFiles.push_back(sortedFiles[i]);
-                batchFiles.push_back(sortedFiles[i + 1]);
-                batchFiles.push_back(sortedFiles[i + 2]);
+            //Add files to the batch
+            std::vector<string> batchFiles;
+            batchFiles.push_back(sortedFiles[0]);
+            batchFiles.push_back(sortedFiles[1]);
+            batchFiles.push_back(sortedFiles[2]);
 
-                //Create output file
-                string ofile = outputFile + string(".") + to_string(++idx);
-                LZ4Writer writer(ofile);
+            //Create output file
+            string ofile = outputFile + string(".") + to_string(++idx);
+            LZ4Writer writer(ofile);
 
-                //Merge batch of files
-                FileMerger<SimplifiedAnnotatedTerm> merger(sortedFiles);
-                while (!merger.isEmpty()) {
-                    SimplifiedAnnotatedTerm t = merger.get();
-                    t.writeTo(&writer);
-                }
+            //Merge batch of files
+            FileMerger<SimplifiedAnnotatedTerm> merger(batchFiles);
+            while (!merger.isEmpty()) {
+                SimplifiedAnnotatedTerm t = merger.get();
+                t.writeTo(&writer);
+            }
 
-                //Remove them
-                sortedFiles.push_back(ofile);
-                for (auto f : batchFiles) {
-                    fs::remove(fs::path(f));
-                }
-                i += 3;
+            //Remove them
+            sortedFiles.push_back(ofile);
+            for (auto f : batchFiles) {
+                fs::remove(fs::path(f));
+                sortedFiles.erase(sortedFiles.begin());
             }
         }
         BOOST_LOG_TRIVIAL(debug) << "Final merge";
 
         //Create a file
+        std::unique_ptr<LZ4Writer> dictWriter(new LZ4Writer(dictfile));
+
+        const char *prevPrefix = NULL;
+        char *previousTerm = new char[MAX_TERM_SIZE];
+        int previousTermSize = 0;
         long counterTerms = -1;
         long counterPairs = 0;
         //Sort the files
-        FileMerger<SimplifiedAnnotatedTerm> merger(sortedFiles);
-        while (!merger.isEmpty()) {
-            SimplifiedAnnotatedTerm t = merger.get();
+        std::unique_ptr<FileMerger<SimplifiedAnnotatedTerm>> merger =
+                    std::unique_ptr<FileMerger<SimplifiedAnnotatedTerm>>(
+                        new FileMerger<SimplifiedAnnotatedTerm>(sortedFiles));
+        while (!merger->isEmpty()) {
+            SimplifiedAnnotatedTerm t = merger->get();
             if (!t.equals(previousTerm, previousTermSize, prevPrefix)) {
                 counterTerms++;
 
@@ -2504,15 +2502,15 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
                 prevPrefix = t.prefix;
                 previousTermSize = t.size;
 
-                dictWriter.writeLong(counterTerms);
+                dictWriter->writeLong(counterTerms);
                 if (t.prefix == NULL) {
-                    dictWriter.writeString(t.term, t.size);
+                    dictWriter->writeString(t.term, t.size);
                 } else {
                     int lenprefix = Utils::decode_short(t.prefix);
                     long len = lenprefix + t.size;
-                    dictWriter.writeVLong(len);
-                    dictWriter.writeRawArray(t.prefix + 2, lenprefix);
-                    dictWriter.writeRawArray(t.term, t.size);
+                    dictWriter->writeVLong(len);
+                    dictWriter->writeRawArray(t.prefix + 2, lenprefix);
+                    dictWriter->writeRawArray(t.term, t.size);
 
                 }
             }

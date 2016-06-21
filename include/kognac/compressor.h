@@ -161,6 +161,7 @@ struct SimplifiedAnnotatedTerm {
             writer->writeVLong(len);
             writer->writeRawArray(prefix + 2, lenprefix);
             writer->writeRawArray(term, size);
+            writer->writeLong(tripleIdAndPosition);
         } else {
             writer->writeString(term, size);
             writer->writeLong(tripleIdAndPosition);
@@ -175,6 +176,7 @@ struct SimplifiedAnnotatedTerm {
             writer->writeVLong(id, len);
             writer->writeRawArray(id, prefix + 2, lenprefix);
             writer->writeRawArray(id, term, size);
+            writer->writeLong(id, tripleIdAndPosition);
         } else {
             writer->writeString(id, term, size);
             writer->writeLong(id, tripleIdAndPosition);
