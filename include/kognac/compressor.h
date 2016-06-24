@@ -34,6 +34,7 @@
 #include <kognac/disklz4writer.h>
 #include <kognac/disklz4reader.h>
 #include <kognac/multidisklz4writer.h>
+#include <kognac/multidisklz4reader.h>
 
 #ifdef COUNTSKETCH
 #include <kognac/CountSketch.h>
@@ -556,7 +557,9 @@ private:
             long &counter, int parallelProcesses, int maxReadingThreads);
 
     static void sortPartition(string prefixInputFile,
-                              string dictfile, DiskLZ4Writer *writer,
+                              MultiDiskLZ4Reader *reader,
+                              string dictfile,
+                              DiskLZ4Writer *writer,
                               int idWriter,
                               string prefixIntFiles,
                               int part,

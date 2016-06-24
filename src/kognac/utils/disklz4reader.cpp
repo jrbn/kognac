@@ -6,6 +6,32 @@
 
 namespace fs = boost::filesystem;
 
+DiskLZ4Reader::DiskLZ4Reader(int npartitions, int nbuffersPerFile) {
+    //Init data structures
+    for (int i = 0; i < npartitions; ++i) {
+        for (int j = 0; j < nbuffersPerFile; ++j)
+            diskbufferpool.push_back(new char [SIZE_DISK_BUFFER]);
+        supportstringbuffers.push_back(std::unique_ptr<char[]>(new char[MAX_TERM_SIZE + 2]));
+    }
+    for (int i = 0; i < npartitions; ++i) {
+        FileInfo inf;
+        inf.buffer = new char[SIZE_SEG];
+        inf.sizebuffer = 0;
+        inf.pivot = 0;
+        this->files.push_back(inf);
+    }
+
+    compressedbuffers = new std::list<BlockToRead>[files.size()];
+    m_files = new std::mutex[files.size()];
+    cond_files = new std::condition_variable[files.size()];
+    time_files = new boost::chrono::duration<double>[files.size()];
+    time_diskbufferpool = boost::chrono::duration<double>::zero();
+    time_rawreading = boost::chrono::duration<double>::zero();
+    for (int i = 0; i < files.size(); ++i) {
+        time_files[i] = boost::chrono::duration<double>::zero();
+    }
+}
+
 DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerFile) {
     this->inputfile = inputfile;
     //Init data structures
@@ -27,12 +53,13 @@ DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerF
     time_files = new boost::chrono::duration<double>[files.size()];
     time_diskbufferpool = boost::chrono::duration<double>::zero();
     time_rawreading = boost::chrono::duration<double>::zero();
-
-    //Open the input file
-    reader.open(inputfile);
     for (int i = 0; i < files.size(); ++i) {
         time_files[i] = boost::chrono::duration<double>::zero();
     }
+
+    //Open the input file
+    reader.open(inputfile);
+
     beginningBlocks.resize(npartitions);
     readBlocks.resize(npartitions);
     //Read the index file
@@ -42,7 +69,7 @@ DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerF
         throw 10;
     }
 
-    auto start = boost::chrono::system_clock::now();
+    //auto start = boost::chrono::system_clock::now();
     ifstream idxreader;
     idxreader.open(idxfile);
     char buffer[8];
@@ -60,13 +87,15 @@ DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerF
         }
     }
     idxreader.close();
-    boost::chrono::duration<double> timeidx =
-        boost::chrono::system_clock::now() - start;
+    //boost::chrono::duration<double> timeidx =
+    //    boost::chrono::system_clock::now() - start;
     //BOOST_LOG_TRIVIAL(debug) << "Time reading the idx file is " << timeidx.count() << "sec.";
 
     //Launch reading thread
     currentthread = std::thread(std::bind(&DiskLZ4Reader::run, this));
 }
+
+
 
 bool DiskLZ4Reader::availableDiskBuffer() {
     return !diskbufferpool.empty();
@@ -79,8 +108,6 @@ bool DiskLZ4Reader::areNewBuffers(const int id) {
 void DiskLZ4Reader::run() {
     size_t totalsize = 0;
     char tmpbuffer[4];
-    //reader.read(tmpbuffer, 4);
-    //int currentFileIdx = Utils::decode_int(tmpbuffer);
     int currentFileIdx = 0;
 
     while (true) {
@@ -134,11 +161,11 @@ void DiskLZ4Reader::run() {
         b.sizebuffer = sizeToBeRead;
         b.pivot = 0;
         compressedbuffers[currentFileIdx].push_back(b);
+        readBlocks[currentFileIdx]++;
         lk2.unlock();
         cond_files[currentFileIdx].notify_one();
 
         //Move to the next file/block
-        readBlocks[currentFileIdx]++;
         currentFileIdx = (currentFileIdx + 1) % files.size();
 
         //reader.read(tmpbuffer, 4);

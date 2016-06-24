@@ -1925,7 +1925,7 @@ void Compressor::immemorysort(string **inputFiles,
                               string outputFile, //int *noutputFiles,
                               bool removeDuplicates,
                               const long maxSizeToSort, bool sample) {
-    timens::system_clock::time_point start = timens::system_clock::now();
+    //timens::system_clock::time_point start = timens::system_clock::now();
 
     //Split maxSizeToSort in n threads
     const long maxMemPerThread = maxSizeToSort / parallelProcesses;
@@ -2287,7 +2287,9 @@ void Compressor::rangePartitionFiles(int readThreads, int maxThreads,
     delete[] readers;
 }
 
-void Compressor::sortPartition(string prefixInputFiles, string dictfile,
+void Compressor::sortPartition(string prefixInputFiles,
+                               MultiDiskLZ4Reader *reader,
+                               string dictfile,
                                DiskLZ4Writer *writer,
                                int idWriter,
                                string prefixIntFiles,
@@ -2313,6 +2315,7 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
             }
         }
     }
+    reader->addInput(idWriter, filesToSort);
 
     string outputFile = prefixIntFiles + "tmp";
 
@@ -2330,61 +2333,63 @@ void Compressor::sortPartition(string prefixInputFiles, string dictfile,
     std::unique_ptr<char[]> tmpprefix = std::unique_ptr<char[]>(new char[MAX_TERM_SIZE]);
 
     //Load all the files until I fill main memory.
-    for (int i = 0; i < filesToSort.size(); ++i) {
-        string file = filesToSort[i];
-        std::unique_ptr<LZ4Reader> r = std::unique_ptr<LZ4Reader>(new LZ4Reader(file));
-        while (!r->isEof()) {
-            SimplifiedAnnotatedTerm t;
-            t.readFrom(r.get());
-            assert(t.prefix == NULL);
-            if ((bytesAllocated +
-                    (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
-                    >= maxMem) {
-                //if (bytesAllocated > 100000) {
-                BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
-                                         << tuples.size() << " tuples ...";
-                string ofile = outputFile + string(".") + to_string(idx);
-                idx++;
-                sortAndDumpToFile(tuples, ofile, false);
-                sortedFiles.push_back(ofile);
-                tuples.clear();
-                col.clear();
-                bytesAllocated = 0;
-            }
-
-            //Check if I can compress the prefix of the string
-            int sizeprefix = 0;
-            const char *prefix = t.getPrefix(sizeprefix);
-            if (sizeprefix > 4) {
-                //Check if the prefix exists in the map
-                Utils::encode_short(tmpprefix.get(), sizeprefix);
-                memcpy(tmpprefix.get() + 2, prefix, sizeprefix);
-                auto itr = prefixset.find((const char*)tmpprefix.get());
-                if (itr == prefixset.end()) {
-                    t.term = col.addNew((char*) t.term +  sizeprefix,
-                                        t.size - sizeprefix);
-                    t.size = t.size - sizeprefix;
-                    const char *prefixtoadd = colprefixes.addNew(tmpprefix.get(),
-                                              sizeprefix + 2);
-                    t.prefix = prefixtoadd;
-                    prefixset.insert(prefixtoadd);
-                    assert(Utils::decode_short(t.prefix) > 0);
-                } else {
-                    t.prefix = *itr;
-                    t.term = col.addNew((char*) t.term +  sizeprefix,
-                                        t.size - sizeprefix);
-                    t.size = t.size - sizeprefix;
-                    assert(Utils::decode_short(t.prefix) > 0);
-                }
-
-            } else {
-                t.prefix = NULL;
-                t.term = col.addNew((char *) t.term, t.size);
-            }
-
-            tuples.push_back(t);
-            bytesAllocated += t.size;
+    //for (int i = 0; i < filesToSort.size(); ++i) {
+    //    string file = filesToSort[i];
+    //    std::unique_ptr<LZ4Reader> r = std::unique_ptr<LZ4Reader>(new LZ4Reader(file));
+    while (!reader->isEOF(idWriter)) {
+        SimplifiedAnnotatedTerm t;
+        t.readFrom(idWriter, reader);
+        assert(t.prefix == NULL);
+        if ((bytesAllocated +
+                (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
+                >= maxMem) {
+            //if (bytesAllocated > 100000) {
+            BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
+                                     << tuples.size() << " tuples ...";
+            string ofile = outputFile + string(".") + to_string(idx);
+            idx++;
+            sortAndDumpToFile(tuples, ofile, false);
+            sortedFiles.push_back(ofile);
+            tuples.clear();
+            col.clear();
+            bytesAllocated = 0;
         }
+
+        //Check if I can compress the prefix of the string
+        int sizeprefix = 0;
+        const char *prefix = t.getPrefix(sizeprefix);
+        if (sizeprefix > 4) {
+            //Check if the prefix exists in the map
+            Utils::encode_short(tmpprefix.get(), sizeprefix);
+            memcpy(tmpprefix.get() + 2, prefix, sizeprefix);
+            auto itr = prefixset.find((const char*)tmpprefix.get());
+            if (itr == prefixset.end()) {
+                t.term = col.addNew((char*) t.term +  sizeprefix,
+                                    t.size - sizeprefix);
+                t.size = t.size - sizeprefix;
+                const char *prefixtoadd = colprefixes.addNew(tmpprefix.get(),
+                                          sizeprefix + 2);
+                t.prefix = prefixtoadd;
+                prefixset.insert(prefixtoadd);
+                assert(Utils::decode_short(t.prefix) > 0);
+            } else {
+                t.prefix = *itr;
+                t.term = col.addNew((char*) t.term +  sizeprefix,
+                                    t.size - sizeprefix);
+                t.size = t.size - sizeprefix;
+                assert(Utils::decode_short(t.prefix) > 0);
+            }
+
+        } else {
+            t.prefix = NULL;
+            t.term = col.addNew((char *) t.term, t.size);
+        }
+
+        tuples.push_back(t);
+        bytesAllocated += t.size;
+    }
+
+    for (auto file : filesToSort) {
         fs::remove(file);
     }
     BOOST_LOG_TRIVIAL(debug) << "Number of prefixes " << prefixset.size();
@@ -2548,16 +2553,20 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
     BOOST_LOG_TRIVIAL(debug) << "Max memory per thread " << maxMem;
 
     DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
+    MultiDiskLZ4Reader **mreaders = new MultiDiskLZ4Reader*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
         string out = prefixInputFile + "-sortedpart-" + to_string(i);
         writers[i] = new DiskLZ4Writer(out, partitions / maxReadingThreads, 3);
+        mreaders[i] = new MultiDiskLZ4Reader(partitions / maxReadingThreads, 3, 4);
         outputfiles.push_back(out);
     }
 
     for (int i = 0; i < partitions; ++i) {
         string dictpartfile = dictfile + string(".") + to_string(i);
         threads[i] = boost::thread(boost::bind(Compressor::sortPartition,
-                                               prefixInputFile, dictpartfile,
+                                               prefixInputFile,
+                                               mreaders[i % maxReadingThreads],
+                                               dictpartfile,
                                                writers[i % maxReadingThreads],
                                                i / maxReadingThreads,
                                                outputfiles[i % maxReadingThreads] + to_string(i),
@@ -2569,8 +2578,10 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
 
     for (int i = 0; i < maxReadingThreads; ++i) {
         delete writers[i];
+        delete mreaders[i];
     }
     delete[] writers;
+    delete[] mreaders;
     BOOST_LOG_TRIVIAL(debug) << "Finished sorting partitions";
 
     //Re-read the sorted tuples and write by tripleID

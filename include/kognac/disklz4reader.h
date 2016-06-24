@@ -19,30 +19,11 @@ using namespace std;
 
 class DiskLZ4Reader {
 private:
-    struct BlockToRead {
-        char *buffer;
-        int sizebuffer;
-        int pivot;
-    };
-
     struct FileInfo {
         char *buffer;
         size_t sizebuffer;
         size_t pivot;
     };
-
-    //Pool of compressed buffers
-    std::list<BlockToRead> *compressedbuffers;
-    //Larger buffers to read from disk. They are proportional to SIZE_SEG
-    std::vector<char*> diskbufferpool;
-    std::mutex m_diskbufferpool;
-    std::condition_variable cond_diskbufferpool;
-    boost::chrono::duration<double> time_diskbufferpool;
-    boost::chrono::duration<double> time_rawreading;
-
-    //Used to track status of reading
-    //int neofs;
-    //int currentFileIdx;
 
     //Info about the files
     string inputfile;
@@ -50,28 +31,44 @@ private:
     ifstream reader;
     std::vector<std::vector<long>> beginningBlocks;
     std::vector<long> readBlocks;
-    std::mutex *m_files;
-    std::condition_variable *cond_files;
-    boost::chrono::duration<double> *time_files;
 
     //support buffers for strings
     std::vector<std::unique_ptr<char[]> > supportstringbuffers;
-
-    std::thread currentthread;
-
-    bool availableDiskBuffer();
-
-    bool areNewBuffers(const int id);
 
     bool uncompressBuffer(const int id);
 
     bool getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
                                 const int id);
 
-    void run();
+    virtual void run();
+
+protected:
+
+    struct BlockToRead {
+        char *buffer;
+        int sizebuffer;
+        int pivot;
+    };
+
+    std::mutex m_diskbufferpool;
+    std::thread currentthread;
+
+    //Pool of compressed buffers
+    std::list<BlockToRead> *compressedbuffers;
+    //Larger buffers to read from disk. They are proportional to SIZE_SEG
+    std::vector<char*> diskbufferpool;
+    std::condition_variable cond_diskbufferpool;
+    boost::chrono::duration<double> time_diskbufferpool;
+    boost::chrono::duration<double> time_rawreading;
+
+    std::mutex *m_files;
+    std::condition_variable *cond_files;
+    boost::chrono::duration<double> *time_files;
 
 public:
     DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerFile);
+
+    DiskLZ4Reader(int npartitions, int nbuffersPerFile);
 
     bool isEOF(const int id);
 
@@ -83,7 +80,11 @@ public:
 
     const char* readString(const int id, int &sizeTerm);
 
-    ~DiskLZ4Reader();
+    bool availableDiskBuffer();
+
+    virtual bool areNewBuffers(const int id);
+
+    virtual ~DiskLZ4Reader();
 };
 
 #endif
