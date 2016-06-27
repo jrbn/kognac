@@ -8,12 +8,9 @@ MultiDiskLZ4Reader::MultiDiskLZ4Reader(int maxNPartitions,
                                        int nbuffersPerPartition,
                                        int maxopenedstreams) :
     DiskLZ4Reader(maxNPartitions, nbuffersPerPartition),
-    maxopenedstreams(maxopenedstreams) {
-
-    partitions.resize(maxNPartitions);
+    maxopenedstreams(maxopenedstreams), partitions(maxNPartitions) {
     nopenedstreams = 0;
     nsets = 0;
-
     currentthread = thread(std::bind(&MultiDiskLZ4Reader::run, this));
 }
 

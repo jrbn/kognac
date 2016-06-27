@@ -217,7 +217,7 @@ bool FileReader::parseLine(const char *line, const int sizeLine) {
                 && lengthO < (MAX_TERM_SIZE - 1)) {
             return true;
         } else {
-            BOOST_LOG_TRIVIAL(error) << "The triple was not parsed correctly: " << lengthS << " " << lengthP << " " << lengthO;
+            //BOOST_LOG_TRIVIAL(error) << "The triple was not parsed correctly: " << lengthS << " " << lengthP << " " << lengthO;
             return false;
         }
 

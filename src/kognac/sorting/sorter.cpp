@@ -50,6 +50,7 @@ void Sorter::sortUnsortedFiles(vector<string> &inputFiles, string dir,
                 writer.write(t1, t2, t3);
             }
         }
+	BOOST_LOG_TRIVIAL(debug) << "Finished reading " << *itr;
         fs::remove(*itr);
     }
 }
@@ -106,7 +107,7 @@ void Sorter::sortBufferAndWriteToFile(vector<Triple> &v, string fileOutput) {
 }
 
 void Sorter::mergeSort(string inputDir, int nThreads, bool initialSorting,
-                       int fileSize, int filesPerMerge) {
+                       long fileSize, int filesPerMerge) {
     int filesInDir = 0;
     int iteration = 0;
 
