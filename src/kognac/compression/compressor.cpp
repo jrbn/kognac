@@ -32,6 +32,7 @@
 #include <kognac/MisraGries.h>
 #include <kognac/sorter.h>
 #include <kognac/filemerger.h>
+#include <kognac/filemerger2.h>
 
 #include <iostream>
 #include <utility>
@@ -58,14 +59,6 @@ bool lessTermFrequenciesDesc(const std::pair<string, long> &p1,
 
 bool sampledTermsSorter1(const std::pair<string, size_t> &p1,
                          const std::pair<string, size_t> &p2) {
-    /*    int l1 = Utils::decode_short(p1.first);
-        int l2 = Utils::decode_short(p2.first);
-        int ret = memcmp(p1.first + 2, p2.first + 2, min(l1, l2));
-        if (ret == 0) {
-            return (l1 - l2) < 0;
-        } else {
-            return ret < 0;
-        }*/
     return p1.first < p2.first;
 }
 
@@ -2287,13 +2280,18 @@ void Compressor::rangePartitionFiles(int readThreads, int maxThreads,
     delete[] readers;
 }
 
-void Compressor::sortPartition(string prefixInputFiles,
-                               MultiDiskLZ4Reader *reader,
-                               string dictfile,
-                               DiskLZ4Writer *writer,
-                               int idWriter,
-                               string prefixIntFiles,
-                               int part, uint64_t *counter, long maxMem) {
+void Compressor::sortPartition(ParamsSortPartition params) {
+    string prefixInputFiles = params.prefixInputFiles;
+    MultiDiskLZ4Reader *reader = params.reader;
+    MultiMergeDiskLZ4Reader *mergerReader = params.mergerReader;
+    string dictfile = params.dictfile;
+    DiskLZ4Writer *writer = params.writer;
+    int idWriter = params.idWriter;
+    string prefixIntFiles = params.prefixIntFiles;
+    int part = params.part;
+    uint64_t *counter = params.counter;
+    long maxMem = params.maxMem;
+
     std::vector<string> filesToSort;
 
     fs::path parentDir = fs::path(prefixInputFiles).parent_path();
@@ -2343,7 +2341,7 @@ void Compressor::sortPartition(string prefixInputFiles,
         if ((bytesAllocated +
                 (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
                 >= maxMem) {
-            //if (bytesAllocated > 100000) {
+        //if (bytesAllocated > 800000) {
             BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
                                      << tuples.size() << " tuples ...";
             string ofile = outputFile + string(".") + to_string(idx);
@@ -2463,19 +2461,35 @@ void Compressor::sortPartition(string prefixInputFiles,
             //Add files to the batch
             std::vector<string> batchFiles;
             batchFiles.push_back(sortedFiles[0]);
+            std::vector<string> cont1;
+            cont1.push_back(sortedFiles[0]);
+            mergerReader->addInput(idWriter * 3, cont1);
+
+            std::vector<string> cont2;
+            cont2.push_back(sortedFiles[1]);
             batchFiles.push_back(sortedFiles[1]);
+            mergerReader->addInput(idWriter * 3 + 1, cont2);
+
+            std::vector<string> cont3;
+            cont3.push_back(sortedFiles[2]);
             batchFiles.push_back(sortedFiles[2]);
+            mergerReader->addInput(idWriter * 3 + 2, cont3);
 
             //Create output file
             string ofile = outputFile + string(".") + to_string(++idx);
             LZ4Writer writer(ofile);
 
             //Merge batch of files
-            FileMerger<SimplifiedAnnotatedTerm> merger(batchFiles);
+            FileMerger2<SimplifiedAnnotatedTerm> merger(mergerReader,
+                    idWriter * 3, 3);
+            //FileMerger<SimplifiedAnnotatedTerm> merger(batchFiles);
             while (!merger.isEmpty()) {
                 SimplifiedAnnotatedTerm t = merger.get();
                 t.writeTo(&writer);
             }
+            mergerReader->unsetPartition(idWriter * 3);
+            mergerReader->unsetPartition(idWriter * 3 + 1);
+            mergerReader->unsetPartition(idWriter * 3 + 2);
 
             //Remove them
             sortedFiles.push_back(ofile);
@@ -2554,34 +2568,51 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
 
     DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
     MultiDiskLZ4Reader **mreaders = new MultiDiskLZ4Reader*[maxReadingThreads];
+    MultiMergeDiskLZ4Reader **mergereaders = new MultiMergeDiskLZ4Reader*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
         string out = prefixInputFile + "-sortedpart-" + to_string(i);
         writers[i] = new DiskLZ4Writer(out, partitions / maxReadingThreads, 3);
         mreaders[i] = new MultiDiskLZ4Reader(partitions / maxReadingThreads, 3, 4);
+        mreaders[i]->start();
+        mergereaders[i] = new MultiMergeDiskLZ4Reader(partitions / maxReadingThreads * 3, 2, 4);
+        mergereaders[i]->start();
         outputfiles.push_back(out);
     }
 
     for (int i = 0; i < partitions; ++i) {
         string dictpartfile = dictfile + string(".") + to_string(i);
+
+        ParamsSortPartition params;
+        params.prefixInputFiles = prefixInputFile;
+        params.reader = mreaders[i % maxReadingThreads];
+        params.mergerReader = mergereaders[i % maxReadingThreads];
+        params.dictfile = dictpartfile;
+        params.writer = writers[i % maxReadingThreads];
+        params.idWriter = i / maxReadingThreads;
+        params.prefixIntFiles = outputfiles[i % maxReadingThreads] + to_string(i);
+        params.part = i;
+        params.counter = &counters[i];
+        params.maxMem = maxMem;
+
         threads[i] = boost::thread(boost::bind(Compressor::sortPartition,
-                                               prefixInputFile,
-                                               mreaders[i % maxReadingThreads],
-                                               dictpartfile,
-                                               writers[i % maxReadingThreads],
-                                               i / maxReadingThreads,
-                                               outputfiles[i % maxReadingThreads] + to_string(i),
-                                               i, &counters[i], maxMem));
+                                               params));
     }
     for (int i = 0; i < partitions; ++i) {
         threads[i].join();
     }
 
     for (int i = 0; i < maxReadingThreads; ++i) {
+        BOOST_LOG_TRIVIAL(debug) << "Delete writer " << i;
         delete writers[i];
+        BOOST_LOG_TRIVIAL(debug) << "Delete multidisk reader " << i;
         delete mreaders[i];
+        BOOST_LOG_TRIVIAL(debug) << "Delete multidisk merge reader " << i;
+        mergereaders[i]->stop();
+        delete mergereaders[i];
     }
     delete[] writers;
     delete[] mreaders;
+    delete[] mergereaders;
     BOOST_LOG_TRIVIAL(debug) << "Finished sorting partitions";
 
     //Re-read the sorted tuples and write by tripleID
@@ -2615,7 +2646,7 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
 }
 
 void Compressor::assignCountersAndPartByTripleID(long startCounter,
-        DiskLZ4Reader *r, int idReader, string outfile, int parallelProcesses) {
+        DiskLZ4Reader * r, int idReader, string outfile, int parallelProcesses) {
     LZ4Writer **outputs = new LZ4Writer*[parallelProcesses];
     for (int i = 0; i < parallelProcesses; ++i) {
         outputs[i] = new LZ4Writer(outfile + string(".") + to_string(i));
@@ -2664,7 +2695,7 @@ void Compressor::mergeNotPopularEntries(string prefixInputFile,
 }
 
 void Compressor::sortByTripleID(vector<string> *inputFiles,
-                                DiskLZ4Writer *writer,
+                                DiskLZ4Writer * writer,
                                 const int idWriter,
                                 string tmpfileprefix,
                                 const long maxMemory) {
@@ -3016,7 +3047,7 @@ unsigned long Compressor::calculateMaxEntriesHashmapCompression() {
     return memoryAvailable;
 }
 
-bool _lessExtensions(const string &a, const string &b) {
+bool _lessExtensions(const string & a, const string & b) {
     string ea = fs::path(a).extension().string();
     string eb = fs::path(b).extension().string();
 

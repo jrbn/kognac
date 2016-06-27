@@ -5,9 +5,9 @@ DiskLZ4Writer::DiskLZ4Writer(int npartitions, int nbuffersPerFile) : npartitions
     //Create a number of compressed buffers
     for (int i = 0; i < npartitions; i++) {
         //Create 10 buffers for each file
-        parentbuffers.push_back(new char[SIZE_COMPRESSED_BUFFER * nbuffersPerFile]);
+        parentbuffers.push_back(new char[SIZE_DISK_BUFFER * nbuffersPerFile]);
         for (int j = 0; j < nbuffersPerFile; ++j) {
-            buffers.push_back(parentbuffers.back() + SIZE_COMPRESSED_BUFFER * j);
+            buffers.push_back(parentbuffers.back() + SIZE_DISK_BUFFER * j);
         }
     }
     fileinfo.resize(npartitions);
@@ -159,7 +159,7 @@ void DiskLZ4Writer::compressAndQueue(const int id) {
     char *buffer = file.compressedbuffer + file.pivotCompressedBuffer;
     if (file.compressedbuffer == NULL ||
             file.pivotCompressedBuffer +
-            SIZE_COMPRESSED_SEG >= SIZE_COMPRESSED_BUFFER) {
+            SIZE_COMPRESSED_SEG >= SIZE_DISK_BUFFER) {
 
         //flush current buffer
         if (file.compressedbuffer != NULL) {

@@ -48,12 +48,14 @@ struct QueueElCmp {
 
 template<class K>
 class FileMerger {
-private:
+protected:
     priority_queue<QueueEl<K>, vector<QueueEl<K> >, QueueElCmp<K> > queue;
     LZ4Reader **files;
     int nfiles;
     int nextFileToRead;
     long elementsRead;
+
+    FileMerger() {}
 
 public:
     FileMerger(vector<string> fn) {
@@ -103,11 +105,12 @@ public:
         return out;
     }
 
-    ~FileMerger() {
+    virtual ~FileMerger() {
         for (int i = 0; i < nfiles; ++i) {
             delete files[i];
         }
-        delete[] files;
+        if (files != NULL)
+            delete[] files;
     }
 };
 

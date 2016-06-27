@@ -35,6 +35,7 @@
 #include <kognac/disklz4reader.h>
 #include <kognac/multidisklz4writer.h>
 #include <kognac/multidisklz4reader.h>
+#include <kognac/multimergedisklz4reader.h>
 
 #ifdef COUNTSKETCH
 #include <kognac/CountSketch.h>
@@ -81,10 +82,8 @@ struct ParamsExtractCommonTermProcedure {
 };
 
 struct ParamsNewCompressProcedure {
-    //string *permDirs;
     int nperms;
     int signaturePerms;
-    //string prefixOutputFile;
     int part;
     int parallelProcesses;
     DiskLZ4Reader *reader;
@@ -107,6 +106,19 @@ struct ParamsUncompressTriples {
     long *distinctValues;
     std::vector<string> *resultsMGS;
     size_t sizeHeap;
+};
+
+struct ParamsSortPartition {
+    string prefixInputFiles;
+    MultiDiskLZ4Reader *reader;
+    MultiMergeDiskLZ4Reader *mergerReader;
+    string dictfile;
+    DiskLZ4Writer *writer;
+    int idWriter;
+    string prefixIntFiles;
+    int part;
+    uint64_t *counter;
+    long maxMem;
 };
 
 struct TriplePair {
@@ -556,14 +568,7 @@ private:
             string dictfile, string outputfile, int partitions,
             long &counter, int parallelProcesses, int maxReadingThreads);
 
-    static void sortPartition(string prefixInputFile,
-                              MultiDiskLZ4Reader *reader,
-                              string dictfile,
-                              DiskLZ4Writer *writer,
-                              int idWriter,
-                              string prefixIntFiles,
-                              int part,
-                              uint64_t *counter, long maxMem);
+    static void sortPartition(ParamsSortPartition params);
 
     static void assignCountersAndPartByTripleID(long startCounter,
             DiskLZ4Reader *reader, int idReader, string outfile, int parallelProcesses);
