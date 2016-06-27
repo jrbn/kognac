@@ -14,6 +14,7 @@ private:
         std::vector<string> files;
         int idxfile;
         bool eof;
+        bool isset;
 
         size_t positionfile;
         size_t sizecurrentfile;
@@ -24,18 +25,22 @@ private:
             positionfile = 0;
             sizecurrentfile = 0;
             eof = false;
+            isset = false;
         }
     };
 
-    std::vector<PartInfo> partitions;
     int nopenedstreams;
-    int nsets;
 
     const int maxopenedstreams;
     std::list<int> historyopenedfiles;
 
+protected:
     std::mutex m_sets;
     std::condition_variable cond_sets;
+    std::vector<PartInfo> partitions;
+    int nsets;
+
+    void readbuffer(int partitionToRead, char *buffer);
 
     bool readAll(int id);
 
@@ -44,11 +49,11 @@ public:
                        int nbuffersPerPartition,
                        int maxopenedstreams);
 
-    void run();
+    virtual void run();
+
+    virtual void start();
 
     void addInput(int id, std::vector<string> &files);
-
-    //    bool isEof(int id);
 
     bool areNewBuffers(const int id);
 

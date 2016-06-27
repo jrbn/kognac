@@ -374,7 +374,9 @@ const char *DiskLZ4Reader::readString(const int id, int &size) {
 }
 
 DiskLZ4Reader::~DiskLZ4Reader() {
-    currentthread.join();
+    if (currentthread.joinable()) {
+        currentthread.join();
+    }
 
     BOOST_LOG_TRIVIAL(debug) << "Time reading all data from disk " << time_rawreading.count()  << "sec.";
     BOOST_LOG_TRIVIAL(debug) << "Time waiting lock m_diskbufferpool " << time_diskbufferpool.count() << "sec.";
