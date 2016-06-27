@@ -71,7 +71,7 @@ public:
         K out = el.key;
 
         //Replace the current element with a new one from the same file
-        if (!reader->isEOF(el.fileIdx)) {
+        if (!reader->isEOF(start + el.fileIdx)) {
             FileMerger<K>::nextFileToRead = el.fileIdx;
         } else {
             FileMerger<K>::nextFileToRead = -1;

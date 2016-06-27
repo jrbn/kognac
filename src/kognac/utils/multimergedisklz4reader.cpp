@@ -45,8 +45,10 @@ void MultiMergeDiskLZ4Reader::unsetPartition(int partition) {
     partitions[partition].opened = false;
     partitions[partition].idxfile = -1;
     partitions[partition].positionfile = 0;
+    partitions[partition].sizecurrentfile = 0;
     nsets--;
     cond_sets.notify_one();
+    cond_diskbufferpool.notify_one();
 }
 
 void MultiMergeDiskLZ4Reader::run() {
@@ -64,20 +66,13 @@ void MultiMergeDiskLZ4Reader::run() {
             break;
         }
 
-        //Get a disk buffer
-        boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
-        std::unique_lock<std::mutex> l(m_diskbufferpool);
-        cond_diskbufferpool.wait(l, std::bind(&DiskLZ4Reader::availableDiskBuffer, this));
-        time_diskbufferpool += boost::chrono::system_clock::now() - start;
-        char *buffer = diskbufferpool.back();
-        diskbufferpool.pop_back();
-        l.unlock();
+        std::unique_lock<std::mutex> l(m_diskbufferpool, std::defer_lock);
 
         //There are some partitions I can read. Which one should I choose?
         //Keep looking until the block is finished, or the block is not set
         int skipped = 0;
-        while (readAll(partitionToRead)
-                || notsetORenoughread(partitionToRead)) {
+        while (nsets > 0 && (readAll(partitionToRead)
+                             || notsetORenoughread(partitionToRead))) {
             partitionToRead = (partitionToRead + 1) % partitions.size();
             skipped++;
             if (skipped == partitions.size()) {
@@ -88,6 +83,17 @@ void MultiMergeDiskLZ4Reader::run() {
                 l.unlock();
             }
         }
+        if (nsets == 0)
+            continue;
+
+        //Get a disk buffer
+        l.lock();
+        boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
+        cond_diskbufferpool.wait(l, std::bind(&DiskLZ4Reader::availableDiskBuffer, this));
+        time_diskbufferpool += boost::chrono::system_clock::now() - start;
+        char *buffer = diskbufferpool.back();
+        diskbufferpool.pop_back();
+        l.unlock();
 
         //Read input for one partition
         readbuffer(partitionToRead, buffer);

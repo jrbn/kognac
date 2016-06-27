@@ -1,4 +1,5 @@
 #include <kognac/disklz4reader.h>
+#include <kognac/consts.h>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -378,13 +379,15 @@ DiskLZ4Reader::~DiskLZ4Reader() {
         currentthread.join();
     }
 
-    BOOST_LOG_TRIVIAL(debug) << "Time reading all data from disk " << time_rawreading.count()  << "sec.";
-    BOOST_LOG_TRIVIAL(debug) << "Time waiting lock m_diskbufferpool " << time_diskbufferpool.count() << "sec.";
     double avg = 0;
     for (int i = 0; i < files.size(); ++i) {
         avg += time_files[i].count();
     }
-    BOOST_LOG_TRIVIAL(debug) << "Time (avg) waiting locks files " << avg / files.size() << "sec.";
+
+    BOOST_LOG_TRIVIAL(debug) << "Time reading all data from disk " <<
+        time_rawreading.count()  << "sec. Time waiting lock m_diskbufferpool " <<
+        time_diskbufferpool.count() << "sec. Time (avg) waiting locks files " <<
+        avg / files.size() << "sec.";
 
     for (int i = 0; i < files.size(); ++i) {
         m_files[i].lock();

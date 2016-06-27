@@ -16,8 +16,6 @@
 
 using namespace std;
 
-#define SIZE_COMPRESSED_BUFFER SIZE_COMPRESSED_SEG * 1000
-
 class DiskLZ4Writer {
 protected:
     struct BlockToWrite {

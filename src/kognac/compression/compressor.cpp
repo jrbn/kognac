@@ -2341,7 +2341,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         if ((bytesAllocated +
                 (sizeof(SimplifiedAnnotatedTerm) * tuples.size()))
                 >= maxMem) {
-            //if (bytesAllocated > 100000) {
+        //if (bytesAllocated > 800000) {
             BOOST_LOG_TRIVIAL(debug) << "Dumping file " << idx << " with "
                                      << tuples.size() << " tuples ...";
             string ofile = outputFile + string(".") + to_string(idx);
@@ -2463,17 +2463,17 @@ void Compressor::sortPartition(ParamsSortPartition params) {
             batchFiles.push_back(sortedFiles[0]);
             std::vector<string> cont1;
             cont1.push_back(sortedFiles[0]);
-            mergerReader->addInput(idWriter, cont1);
+            mergerReader->addInput(idWriter * 3, cont1);
 
             std::vector<string> cont2;
             cont2.push_back(sortedFiles[1]);
             batchFiles.push_back(sortedFiles[1]);
-            mergerReader->addInput(idWriter + 1, cont2);
+            mergerReader->addInput(idWriter * 3 + 1, cont2);
 
             std::vector<string> cont3;
             cont3.push_back(sortedFiles[2]);
             batchFiles.push_back(sortedFiles[2]);
-            mergerReader->addInput(idWriter + 2, cont3);
+            mergerReader->addInput(idWriter * 3 + 2, cont3);
 
             //Create output file
             string ofile = outputFile + string(".") + to_string(++idx);
@@ -2487,10 +2487,9 @@ void Compressor::sortPartition(ParamsSortPartition params) {
                 SimplifiedAnnotatedTerm t = merger.get();
                 t.writeTo(&writer);
             }
-
-            mergerReader->unsetPartition(idWriter);
-            mergerReader->unsetPartition(idWriter + 1);
-            mergerReader->unsetPartition(idWriter + 2);
+            mergerReader->unsetPartition(idWriter * 3);
+            mergerReader->unsetPartition(idWriter * 3 + 1);
+            mergerReader->unsetPartition(idWriter * 3 + 2);
 
             //Remove them
             sortedFiles.push_back(ofile);
