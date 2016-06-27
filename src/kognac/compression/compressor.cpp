@@ -2602,8 +2602,11 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
     }
 
     for (int i = 0; i < maxReadingThreads; ++i) {
+        BOOST_LOG_TRIVIAL(debug) << "Delete writer " << i;
         delete writers[i];
+        BOOST_LOG_TRIVIAL(debug) << "Delete multidisk reader " << i;
         delete mreaders[i];
+        BOOST_LOG_TRIVIAL(debug) << "Delete multidisk merge reader " << i;
         mergereaders[i]->stop();
         delete mergereaders[i];
     }
