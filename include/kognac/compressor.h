@@ -550,6 +550,8 @@ private:
         Hashtable **tables2,
         Hashtable **tables3);
 
+    static void concatenateFiles(string prefix,
+                                 int parallelProcesses);
 
     static std::vector<string> getPartitionBoundaries(const string kbdir,
             const int partitions);
