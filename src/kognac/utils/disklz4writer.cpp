@@ -125,7 +125,7 @@ void DiskLZ4Writer::writeShort(const int id, const int value) {
     fileinfo[id].sizebuffer += 2;
 }
 
-void DiskLZ4Writer::setTerminated(const int id) {
+void DiskLZ4Writer::flush(const int id) {
     //Write down the last buffer
     int sizebuffer = fileinfo[id].sizebuffer;
     if (sizebuffer > 0) {
@@ -138,7 +138,8 @@ void DiskLZ4Writer::setTerminated(const int id) {
         BlockToWrite b;
         b.buffer = fileinfo[id].compressedbuffer;
         b.sizebuffer = fileinfo[id].pivotCompressedBuffer;
-        b.idfile = id;
+        b.idxfile = fileinfo[id].idxfiletowrite;
+        b.idpart = id;
 
         //Copy in the writing queue
         std::unique_lock<std::mutex> lk2(mutexBlockToWrite);
@@ -146,7 +147,10 @@ void DiskLZ4Writer::setTerminated(const int id) {
         addedBlocksToWrite++;
         lk2.unlock();
     }
+}
 
+void DiskLZ4Writer::setTerminated(const int id) {
+    flush(id);
     mutexTerminated.lock();
     nterminated++;
     mutexTerminated.unlock();
@@ -166,7 +170,8 @@ void DiskLZ4Writer::compressAndQueue(const int id) {
             BlockToWrite b;
             b.buffer = file.compressedbuffer;
             b.sizebuffer = file.pivotCompressedBuffer;
-            b.idfile = id;
+            b.idxfile = file.idxfiletowrite;
+            b.idpart = id;
 
             //Copy in the writing queue
             std::unique_lock<std::mutex> lk2(mutexBlockToWrite);
@@ -245,9 +250,9 @@ void DiskLZ4Writer::run() {
         start = boost::chrono::system_clock::now();
         auto it = blocks.begin();
         while (it != blocks.end()) {
-            startpositions[it->idfile].push_back(stream.tellp());
+            startpositions[it->idpart].push_back(stream.tellp());
             char el[4];
-            Utils::encode_int(el, it->idfile);
+            Utils::encode_int(el, it->idpart);
             stream.write(el, 4);
             Utils::encode_int(el, it->sizebuffer);
             stream.write(el, 4);

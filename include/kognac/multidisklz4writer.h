@@ -7,7 +7,15 @@
 
 class MultiDiskLZ4Writer : public DiskLZ4Writer {
 private:
-    std::vector<string> files;
+    struct PartFiles {
+        std::vector<string> filestowrite;
+        int currentopenedfile;
+        PartFiles() {
+            currentopenedfile = 0;
+        }
+    };
+    std::vector<PartFiles> files;
+
     ofstream *streams;
     bool *openedstreams;
     int nopenedstreams;
@@ -19,7 +27,9 @@ public:
                        int nbuffersPerFile,
                        int maxopenedstreams);
 
-    void run();
+    void addFileToWrite(int idpart, string file);
+
+    virtual void run();
 
     virtual ~MultiDiskLZ4Writer();
 };

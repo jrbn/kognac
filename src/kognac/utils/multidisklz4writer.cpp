@@ -6,13 +6,31 @@ MultiDiskLZ4Writer::MultiDiskLZ4Writer(std::vector<string> files,
     DiskLZ4Writer(files.size(), nbuffersPerFile),
     maxopenedstreams(maxopenedstreams) {
     assert(files.size() > 0);
-    this->files = files;
+
+    for (auto f : files) {
+        PartFiles partfiles;
+        partfiles.filestowrite.push_back(f);
+        this->files.push_back(partfiles);
+    }
+
     streams = new ofstream[files.size()];
     openedstreams = new bool[files.size()];
     memset(openedstreams, 0, sizeof(bool) * files.size());
     nopenedstreams = 0;
+
     currentthread = thread(std::bind(&MultiDiskLZ4Writer::run, this));
     processStarted = true;
+}
+
+void MultiDiskLZ4Writer::addFileToWrite(int idpart, string file) {
+    //Flush all buffers
+    flush(idpart);
+
+    //Add a new file in the registered list
+    files[idpart].filestowrite.push_back(file);
+
+    //Increase the counter in FileInfo
+    fileinfo[idpart].idxfiletowrite++;
 }
 
 void MultiDiskLZ4Writer::run() {
@@ -43,7 +61,8 @@ void MultiDiskLZ4Writer::run() {
 
         //First get the right file to open
         auto it = blocks.begin();
-        const int idFile = it->idfile;
+        const int idFile = it->idpart;
+        int currentfileidx = files[idFile].currentopenedfile;
         if (!openedstreams[idFile]) {
             if (nopenedstreams == maxopenedstreams) {
                 //Must close one file. I pick the oldest one
@@ -54,13 +73,21 @@ void MultiDiskLZ4Writer::run() {
                 nopenedstreams--;
             }
             //BOOST_LOG_TRIVIAL(debug) << "Open file " << files[idFile];
-            streams[idFile].open(files[idFile], ios_base::ate | ios_base::app);
+            string path = files[idFile].filestowrite[currentfileidx];
+            streams[idFile].open(path, ios_base::ate | ios_base::app);
             openedstreams[idFile] = true;
             historyopenedfiles.push_back(idFile);
             nopenedstreams++;
         }
         while (it != blocks.end()) {
-            assert(it->idfile == idFile);
+            assert(it->idpart == idFile);
+            if (currentfileidx != it->idxfile) {
+                //Close the file and open the new one
+                currentfileidx = files[idFile].currentopenedfile = it->idxfile;
+                string path = files[idFile].filestowrite[currentfileidx];
+                streams[idFile].close();
+                streams[idFile].open(path, ios_base::ate | ios_base::app);
+            }
             streams[idFile].write(it->buffer, it->sizebuffer);
             it++;
         }

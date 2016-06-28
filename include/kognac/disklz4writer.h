@@ -19,12 +19,15 @@ using namespace std;
 class DiskLZ4Writer {
 protected:
     struct BlockToWrite {
-        int idfile;
+        int idpart;
+        int idxfile;
         char *buffer;
         size_t sizebuffer;
     };
 
     struct FileInfo {
+        int idxfiletowrite;
+
         char *buffer;
         size_t sizebuffer;
         char *compressedbuffer;
@@ -35,6 +38,7 @@ protected:
             sizebuffer = 0;
             compressedbuffer = NULL;
             pivotCompressedBuffer = 0;
+            idxfiletowrite = 0;
         }
 
         ~FileInfo() {
@@ -60,7 +64,11 @@ protected:
     std::thread currentthread;
     bool processStarted;
 
+    std::vector<FileInfo> fileinfo;
+
     DiskLZ4Writer(int npartitions, int nbuffersPerFile);
+
+    void flush(const int id);
 
 private:
 
@@ -73,7 +81,6 @@ private:
     //Store the raw buffers to be written
     std::vector<char*> parentbuffers;
 
-    std::vector<FileInfo> fileinfo;
 
     std::mutex mutexTerminated;
 
