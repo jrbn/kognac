@@ -2554,44 +2554,60 @@ void Compressor::sortPartition(ParamsSortPartition params) {
     writer->setTerminated(idWriter);
 }
 
-void Compressor::concatenateFiles(string prefix, int parallelProcesses) {
-    for (int part = 0; part < parallelProcesses; ++part) {
-        BOOST_LOG_TRIVIAL(debug) << "Concatenating files in partition " << part;
-        std::vector<string> filestoconcat;
+void Compressor::concatenateFiles_seq(string prefix, int part) {
+    BOOST_LOG_TRIVIAL(debug) << "Concatenating files in partition " << part;
+    std::vector<string> filestoconcat;
 
-        fs::path parentDir = fs::path(prefix).parent_path();
-        fs::directory_iterator ei;
-        for (fs::directory_iterator diter(parentDir); diter != ei; ++diter) {
-            if (fs::is_regular_file(diter->status())) {
-                auto pfile = diter->path();
-                if (boost::algorithm::contains(pfile.string(), "range")) {
-                    if (pfile.has_extension()) {
-                        string ext = pfile.extension().string();
-                        if (ext == string(".") + to_string(part)) {
-                            if (fs::file_size(pfile.string()) > 0) {
-                                filestoconcat.push_back(pfile.string());
-                            } else {
-                                fs::remove(pfile.string());
-                            }
+    fs::path parentDir = fs::path(prefix).parent_path();
+    fs::directory_iterator ei;
+    for (fs::directory_iterator diter(parentDir); diter != ei; ++diter) {
+        if (fs::is_regular_file(diter->status())) {
+            auto pfile = diter->path();
+            if (boost::algorithm::contains(pfile.string(), "range")) {
+                if (pfile.has_extension()) {
+                    string ext = pfile.extension().string();
+                    if (ext == string(".") + to_string(part)) {
+                        if (fs::file_size(pfile.string()) > 0) {
+                            filestoconcat.push_back(pfile.string());
+                        } else {
+                            fs::remove(pfile.string());
                         }
                     }
                 }
             }
         }
-
-        if (filestoconcat.size() > 1) {
-            string dest = filestoconcat[0];
-            std::ofstream fdest(dest, std::ios_base::binary | std::ios_base::app | std::ios_base::ate);
-            for(int i = 1; i < filestoconcat.size(); ++i) {
-                std::ifstream input(filestoconcat[i], std::ios_base::binary);
-                fdest << input.rdbuf();
-                input.close();
-                fs::remove(filestoconcat[i]);
-            }
-            fdest.close();
-        }
-
     }
+
+    if (filestoconcat.size() > 1) {
+        string dest = filestoconcat[0];
+        std::ofstream fdest(dest, std::ios_base::binary | std::ios_base::app | std::ios_base::ate);
+        for (int i = 1; i < filestoconcat.size(); ++i) {
+            std::ifstream input(filestoconcat[i], std::ios_base::binary);
+            fdest << input.rdbuf();
+            input.close();
+            fs::remove(filestoconcat[i]);
+        }
+        fdest.close();
+    }
+}
+
+void Compressor::concatenateFiles(string prefix,
+                                  int parallelProcesses,
+                                  int maxReadingThreads) {
+
+    boost::thread *threads = new boost::thread[maxReadingThreads];
+    int part = 0;
+    while (part < parallelProcesses) {
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            threads[i] = boost::thread(Compressor::concatenateFiles_seq,
+                    prefix, part + i);
+        }
+        for (int i = 0; i < maxReadingThreads; ++i) {
+            threads[i].join();
+        }
+        part += maxReadingThreads;
+    }
+    delete[] threads;
 }
 
 void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
@@ -2600,7 +2616,7 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
         long & counter, int parallelProcesses, int maxReadingThreads) {
 
     //Before I start sorting the files, I concatenate files together
-    concatenateFiles(prefixInputFile, parallelProcesses);
+    concatenateFiles(prefixInputFile, parallelProcesses, maxReadingThreads);
 
     std::vector<boost::thread> threads(partitions);
     std::vector<string> outputfiles;
