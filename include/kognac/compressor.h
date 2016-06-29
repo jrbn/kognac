@@ -112,7 +112,9 @@ struct ParamsSortPartition {
     string prefixInputFiles;
     MultiDiskLZ4Reader *reader;
     MultiMergeDiskLZ4Reader *mergerReader;
-    string dictfile;
+    MultiDiskLZ4Writer *dictWriter;
+    int idDictWriter;
+    //string dictfile;
     DiskLZ4Writer *writer;
     int idWriter;
     string prefixIntFiles;
