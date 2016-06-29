@@ -2509,11 +2509,16 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         long counterTerms = -1;
         long counterPairs = 0;
         //Sort the files
-        std::unique_ptr<FileMerger<SimplifiedAnnotatedTerm>> merger =
-                    std::unique_ptr<FileMerger<SimplifiedAnnotatedTerm>>(
-                        new FileMerger<SimplifiedAnnotatedTerm>(sortedFiles));
-        while (!merger->isEmpty()) {
-            SimplifiedAnnotatedTerm t = merger->get();
+        for (int i = 0; i < sortedFiles.size(); ++i) {
+            std::vector<string> cont1;
+            cont1.push_back(sortedFiles[i]);
+            mergerReader->addInput(idWriter * 3 + i, cont1);
+        }
+
+        FileMerger2<SimplifiedAnnotatedTerm> merger(mergerReader,
+                idWriter * 3, sortedFiles.size());
+        while (!merger.isEmpty()) {
+            SimplifiedAnnotatedTerm t = merger.get();
             if (!t.equals(previousTerm, previousTermSize, prevPrefix)) {
                 counterTerms++;
 
@@ -2539,6 +2544,14 @@ void Compressor::sortPartition(ParamsSortPartition params) {
             assert(t.tripleIdAndPosition != -1);
             writer->writeLong(idWriter, counterTerms);
             writer->writeLong(idWriter, t.tripleIdAndPosition);
+        }
+
+        //remove the intermediate files
+        int i = 0;
+        for (auto f : sortedFiles) {
+            mergerReader->unsetPartition(idWriter * 3 + i);
+            fs::remove(fs::path(f));
+            i++;
         }
 
         delete[] previousTerm;
@@ -2600,7 +2613,7 @@ void Compressor::concatenateFiles(string prefix,
     while (part < parallelProcesses) {
         for (int i = 0; i < maxReadingThreads; ++i) {
             threads[i] = boost::thread(Compressor::concatenateFiles_seq,
-                    prefix, part + i);
+                                       prefix, part + i);
         }
         for (int i = 0; i < maxReadingThreads; ++i) {
             threads[i].join();
