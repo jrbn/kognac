@@ -2768,12 +2768,15 @@ void Compressor::assignCountersAndPartByTripleID(long startCounter,
         const long c = r->readLong(idReader);
         const long tid = r->readLong(idReader);
         const  int idx = (long) (tid >> 2) % partitions;
-
         if (counter == maxNProcessedTuples) {
-            int processedParts = 0;
+            int nProcessedParts = 0;
             int currentPart = 0;
             int skippedParts = 0;
-            while (processedParts < partitions) {
+            std::vector<bool> processedParts(partitions);
+            for (int i = 0; i < partitions; ++i) {
+                processedParts[i] = false;
+            }
+            while (nProcessedParts < partitions) {
                 if (!buffers[currentPart].empty()) {
                     //Check if we can get a lock
                     bool resp = locks[currentPart].try_lock();
@@ -2791,18 +2794,20 @@ void Compressor::assignCountersAndPartByTripleID(long startCounter,
                         locks[currentPart].unlock();
                         buffers[currentPart].clear();
                         skippedParts = 0;
-                        processedParts++;
+
+                        processedParts[currentPart] = true;
+                        nProcessedParts++;
                     } else {
                         skippedParts++;
                     }
-                } else {
-                    processedParts++;
+                } else if (!processedParts[currentPart]) {
+                    nProcessedParts++;
+                    processedParts[currentPart] = true;
                 }
                 currentPart = (currentPart + 1) % partitions;
             }
             counter = 0;
         }
-
         buffers[idx].push_back(make_pair(tid, c + startCounter));
         counter++;
 
@@ -2811,10 +2816,15 @@ void Compressor::assignCountersAndPartByTripleID(long startCounter,
     }
 
     if (counter > 0) {
-        int processedParts = 0;
+        int nProcessedParts = 0;
         int currentPart = 0;
         int skippedParts = 0;
-        while (processedParts < partitions) {
+        std::vector<bool> processedParts(partitions);
+        for (int i = 0; i < partitions; ++i) {
+            processedParts[i] = false;
+        }
+
+        while (nProcessedParts < partitions) {
             if (!buffers[currentPart].empty()) {
                 //Check if we can get a lock
                 bool resp = locks[currentPart].try_lock();
@@ -2833,12 +2843,15 @@ void Compressor::assignCountersAndPartByTripleID(long startCounter,
                     locks[currentPart].unlock();
                     buffers[currentPart].clear();
                     skippedParts = 0;
-                    processedParts++;
+
+                    processedParts[currentPart] = true;
+                    nProcessedParts++;
                 } else {
                     skippedParts++;
                 }
-            } else {
-                processedParts++;
+            } else if (!processedParts[currentPart]) {
+                nProcessedParts++;
+                processedParts[currentPart] = true;
             }
             currentPart = (currentPart + 1) % partitions;
         }
@@ -2956,32 +2969,6 @@ void Compressor::compressTriples(const int maxReadingThreads,
                                                    parallelProcesses / maxReadingThreads,
                                                    3);
         }
-
-        /*//DEBUG
-        long prev = -1;
-        DiskLZ4Reader debugReader(finalUncommonFiles[0],
-                                  parallelProcesses / maxReadingThreads,
-                                  3);
-        while (!debugReader.isEOF(0)) {
-            long tripleId = debugReader.readLong(0);
-            long nextTerm = debugReader.readLong(0);
-            if (prev >= tripleId) {
-                BOOST_LOG_TRIVIAL(error) << "roror";
-                throw 10;
-            }
-        }
-        prev = -1;
-        while (!debugReader.isEOF(1)) {
-            long tripleId = debugReader.readLong(1);
-            if (tripleId >> 2 == 1)
-                BOOST_LOG_TRIVIAL(debug) << "BUCKET1 " << (tripleId >> 2);
-            long nextTerm = debugReader.readLong(1);
-            if (prev >= tripleId) {
-                BOOST_LOG_TRIVIAL(error) << "roror";
-                throw 10;
-            }
-        }
-        //END DEBUG*/
 
         //Set up the output
         std::vector<std::vector<string>> chunks;
