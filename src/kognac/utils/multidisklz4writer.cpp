@@ -119,6 +119,9 @@ void MultiDiskLZ4Writer::run() {
 
 MultiDiskLZ4Writer::~MultiDiskLZ4Writer() {
     currentthread.join();
+    for(int i = 0; i < files.size(); ++i) {
+        assert(!streams[i].is_open());
+    }
     processStarted = false;
     delete[] streams;
     delete[] openedstreams;

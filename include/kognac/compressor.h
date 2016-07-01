@@ -53,6 +53,8 @@
 #include <vector>
 #include <list>
 #include <set>
+#include <thread>
+#include <mutex>
 #include <assert.h>
 
 using namespace std;
@@ -278,7 +280,8 @@ struct SimplifiedAnnotatedTerm {
                         assert(len1 != len2);
                         if (len1 < len2) {
                             if (i.size > 0) {
-                                //Must compare the second prefix with the remaining of the first part
+                                //Must compare the second prefix with the
+                                //remaining of the first part
                                 int s1 = i.size;
                                 int s2 = len2 - len1;
                                 int mins = min(s1, s2);
@@ -305,7 +308,8 @@ struct SimplifiedAnnotatedTerm {
                             }
                         } else {
                             if (j.size > 0) {
-                                //Must compare the second prefix with the remaining of the first part
+                                //Must compare the second prefix with the
+                                //remaining of the first part
                                 int s1 = len1 - len2;
                                 int s2 = j.size;
                                 int mins = min(s1, s2);
@@ -578,7 +582,11 @@ private:
     static void sortPartition(ParamsSortPartition params);
 
     static void assignCountersAndPartByTripleID(long startCounter,
-            DiskLZ4Reader *reader, int idReader, string outfile, int parallelProcesses);
+            DiskLZ4Reader *reader, int idReader,
+            MultiDiskLZ4Writer **writers,
+            std::mutex *locks,
+            int parallelProcesses,
+            int maxReadingThreads);
 
     //static void sampleTuples(string input, std::vector<string> *output);
 

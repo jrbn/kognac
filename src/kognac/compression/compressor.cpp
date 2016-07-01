@@ -968,14 +968,6 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
     char *tTriple = new char[MAX_TERM_SIZE * 3];
     bool valid[3];
 
-    /*
-    SimpleTripleWriter **permWriters = new SimpleTripleWriter*[params.nperms];
-    const int nperms = params.nperms;
-    for (int i = 0; i < nperms; ++i) {
-        permWriters[i] = new SimpleTripleWriter(params.permDirs[i],
-                                                params.prefixOutputFile + to_string(params.part), false);
-    }*/
-
     //This byte is written by the SimpleTripleWriter
     for (int i = 0; i < nperms; ++i) {
         writer->writeByte(startIdxWriter + i, 0);
@@ -1001,7 +993,8 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
                         long tripleId = uncommonTermsReader->readLong(idReader);
                         nextTripleId = tripleId >> 2;
                         nextPos = tripleId & 0x3;
-                        nextTerm = uncommonTermsReader->readLong(idReader);
+                        long n2 = uncommonTermsReader->readLong(idReader);
+                        nextTerm = n2;
                     } else {
                         //BOOST_LOG_TRIVIAL(debug) << "File " << idReader << " is finished";
                     }
@@ -1859,6 +1852,7 @@ void Compressor::sortAndDumpToFile2(vector<TriplePair> &pairs,
                                     string outputFile) {
     std::sort(pairs.begin(), pairs.end(), TriplePair::sLess);
     LZ4Writer outputSegment(outputFile);
+
     for (vector<TriplePair>::iterator itr = pairs.begin(); itr != pairs.end();
             ++itr) {
         itr->writeTo(&outputSegment);
@@ -2704,57 +2698,152 @@ void Compressor::sortPartitionsAndAssignCounters(string prefixInputFile,
     delete[] dictwriters;
     delete[] mreaders;
     delete[] mergereaders;
-    BOOST_LOG_TRIVIAL(debug) << "Finished sorting partitions";
+    BOOST_LOG_TRIVIAL(debug) << "Finished sorting partitions. Now shuffling by triple ID";
 
     //Re-read the sorted tuples and write by tripleID
     DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
+    MultiDiskLZ4Writer **twriters = new MultiDiskLZ4Writer*[maxReadingThreads];
+    std::mutex *mutexes = new std::mutex[parallelProcesses];
     for (int i = 0; i < maxReadingThreads; ++i) {
         readers[i] = new DiskLZ4Reader(outputfiles[i],
                                        partitions / maxReadingThreads,
                                        3);
+        int filesToPart = partitions / maxReadingThreads;
+        std::vector<string> filesForThread;
+        for (int j = 0; j < filesToPart; ++j) {
+            string outfile = outputfile + string(".0.") +
+                             to_string(j * maxReadingThreads + i);
+            filesForThread.push_back(outfile);
+        }
+        twriters[i] = new MultiDiskLZ4Writer(filesForThread, filesToPart, 3);
     }
 
     long startCounter = counter;
     for (int i = 0; i < partitions; ++i) {
-        string outfile = outputfile + string(".") + to_string(i);
         threads[i] = boost::thread(boost::bind(
                                        &Compressor::assignCountersAndPartByTripleID,
                                        startCounter, readers[i % maxReadingThreads],
                                        i / maxReadingThreads,
-                                       outfile, parallelProcesses));
+                                       twriters,
+                                       mutexes,
+                                       parallelProcesses,
+                                       maxReadingThreads));
         startCounter += counters[i];
     }
     for (int i = 0; i < partitions; ++i) {
         threads[i].join();
     }
 
+    for (int i = 0; i < partitions; ++i) {
+        twriters[i % maxReadingThreads]->setTerminated(i / maxReadingThreads);
+    }
+
     for (int i = 0; i < maxReadingThreads; ++i) {
         delete readers[i];
         fs::remove(outputfiles[i]);
         fs::remove(outputfiles[i] + ".idx");
+        delete twriters[i];
     }
-    delete [] readers;
+    delete[] readers;
+    delete[] mutexes;
+    delete[] twriters;
 }
 
 void Compressor::assignCountersAndPartByTripleID(long startCounter,
-        DiskLZ4Reader * r, int idReader, string outfile, int parallelProcesses) {
-    LZ4Writer **outputs = new LZ4Writer*[parallelProcesses];
-    for (int i = 0; i < parallelProcesses; ++i) {
-        outputs[i] = new LZ4Writer(outfile + string(".") + to_string(i));
-    }
+        DiskLZ4Reader *r, int idReader, MultiDiskLZ4Writer **writers,
+        std::mutex *locks,
+        int partitions,
+        int maxReadingThreads) {
 
+    //LZ4Writer **outputs = new LZ4Writer*[parallelProcesses];
+    //for (int i = 0; i < parallelProcesses; ++i) {
+    //    outputs[i] = new LZ4Writer(outfile + string(".") + to_string(i));
+    //}
+    std::vector<std::vector<std::pair<long, long>>> buffers;
+    buffers.resize(partitions);
+
+    const long maxNProcessedTuples = 10000000;
+    long counter = 0;
     while (!r->isEOF(idReader)) {
         const long c = r->readLong(idReader);
         const long tid = r->readLong(idReader);
-        const  int idx = (long) (tid >> 2) % parallelProcesses;
-        outputs[idx]->writeLong(tid);
-        outputs[idx]->writeLong(c + startCounter);
+        const  int idx = (long) (tid >> 2) % partitions;
+
+        if (counter == maxNProcessedTuples) {
+            int processedParts = 0;
+            int currentPart = 0;
+            int skippedParts = 0;
+            while (processedParts < partitions) {
+                if (!buffers[currentPart].empty()) {
+                    //Check if we can get a lock
+                    bool resp = locks[currentPart].try_lock();
+                    if (resp || skippedParts == partitions) {
+                        if (!resp) {
+                            locks[currentPart].lock();
+                        }
+                        MultiDiskLZ4Writer *writer = writers[currentPart % maxReadingThreads];
+                        const int idWriter = currentPart / maxReadingThreads;
+                        for (int j = 0; j < buffers[currentPart].size(); ++j) {
+                            auto pair = buffers[currentPart][j];
+                            writer->writeLong(idWriter, pair.first);
+                            writer->writeLong(idWriter, pair.second);
+                        }
+                        locks[currentPart].unlock();
+                        buffers[currentPart].clear();
+                        skippedParts = 0;
+                        processedParts++;
+                    } else {
+                        skippedParts++;
+                    }
+                } else {
+                    processedParts++;
+                }
+                currentPart = (currentPart + 1) % partitions;
+            }
+            counter = 0;
+        }
+
+        buffers[idx].push_back(make_pair(tid, c + startCounter));
+        counter++;
+
+        //outputs[idx]->writeLong(tid);
+        //outputs[idx]->writeLong(c + startCounter);
     }
 
-    for (int i = 0; i < parallelProcesses; ++i) {
-        delete outputs[i];
+    if (counter > 0) {
+        int processedParts = 0;
+        int currentPart = 0;
+        int skippedParts = 0;
+        while (processedParts < partitions) {
+            if (!buffers[currentPart].empty()) {
+                //Check if we can get a lock
+                bool resp = locks[currentPart].try_lock();
+                if (resp || skippedParts == partitions) {
+                    if (!resp) {
+                        locks[currentPart].lock();
+                    }
+                    int a = currentPart % maxReadingThreads;
+                    MultiDiskLZ4Writer *writer = writers[a];
+                    const int idWriter = currentPart / maxReadingThreads;
+                    for (int j = 0; j < buffers[currentPart].size(); ++j) {
+                        auto pair = buffers[currentPart][j];
+                        writer->writeLong(idWriter, pair.first);
+                        writer->writeLong(idWriter, pair.second);
+                    }
+                    locks[currentPart].unlock();
+                    buffers[currentPart].clear();
+                    skippedParts = 0;
+                    processedParts++;
+                } else {
+                    skippedParts++;
+                }
+            } else {
+                processedParts++;
+            }
+            currentPart = (currentPart + 1) % partitions;
+        }
+        counter = 0;
     }
-    delete[] outputs;
 }
 
 void Compressor::mergeNotPopularEntries(string prefixInputFile,
@@ -2795,7 +2884,6 @@ void Compressor::sortByTripleID(vector<string> *inputFiles,
     vector<string> filesToMerge;
     {
         vector<TriplePair> pairs;
-
         for (int i = 0; i < inputFiles->size(); ++i) {
             //Read the file
             string fileName = (*inputFiles)[i];
@@ -2829,7 +2917,6 @@ void Compressor::sortByTripleID(vector<string> *inputFiles,
     FileMerger<TriplePair> merger(filesToMerge);
     while (!merger.isEmpty()) {
         TriplePair tp = merger.get();
-        //BOOST_LOG_TRIVIAL(debug) << "IDWriter " << idWriter << " " << (tp.tripleIdAndPosition >> 2) << " " << (tp.tripleIdAndPosition & 0x3) << " " << tp.term;
         writer->writeLong(idWriter, tp.tripleIdAndPosition);
         writer->writeLong(idWriter, tp.term);
     }
@@ -2869,6 +2956,32 @@ void Compressor::compressTriples(const int maxReadingThreads,
                                                    parallelProcesses / maxReadingThreads,
                                                    3);
         }
+
+        /*//DEBUG
+        long prev = -1;
+        DiskLZ4Reader debugReader(finalUncommonFiles[0],
+                                  parallelProcesses / maxReadingThreads,
+                                  3);
+        while (!debugReader.isEOF(0)) {
+            long tripleId = debugReader.readLong(0);
+            long nextTerm = debugReader.readLong(0);
+            if (prev >= tripleId) {
+                BOOST_LOG_TRIVIAL(error) << "roror";
+                throw 10;
+            }
+        }
+        prev = -1;
+        while (!debugReader.isEOF(1)) {
+            long tripleId = debugReader.readLong(1);
+            if (tripleId >> 2 == 1)
+                BOOST_LOG_TRIVIAL(debug) << "BUCKET1 " << (tripleId >> 2);
+            long nextTerm = debugReader.readLong(1);
+            if (prev >= tripleId) {
+                BOOST_LOG_TRIVIAL(error) << "roror";
+                throw 10;
+            }
+        }
+        //END DEBUG*/
 
         //Set up the output
         std::vector<std::vector<string>> chunks;
