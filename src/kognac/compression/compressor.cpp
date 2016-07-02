@@ -2887,35 +2887,38 @@ void Compressor::mergeNotPopularEntries(string prefixInputFile,
                                     maxReadingThreads);
 }
 
-void Compressor::sortByTripleID(vector<string> *inputFiles,
-                                DiskLZ4Writer * writer,
-                                const int idWriter,
-                                string tmpfileprefix,
-                                const long maxMemory) {
+void Compressor::sortByTripleID(//vector<string> *inputFiles,
+    MultiDiskLZ4Reader *reader,
+    DiskLZ4Writer * writer,
+    const int idWriter,
+    string tmpfileprefix,
+    const long maxMemory) {
     //First sort the input files in chunks of x elements
     int idx = 0;
     vector<string> filesToMerge;
     {
         vector<TriplePair> pairs;
-        for (int i = 0; i < inputFiles->size(); ++i) {
+        while (!reader->isEOF(idWriter)) {
+            //for (int i = 0; i < inputFiles->size(); ++i) {
             //Read the file
-            string fileName = (*inputFiles)[i];
+            //string fileName = (*inputFiles)[i];
             //Process the file
-            LZ4Reader *fis = new LZ4Reader(fileName);
-            while (!fis->isEof()) {
-                if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
-                    string file = tmpfileprefix + string(".") + to_string(idx++);
-                    sortAndDumpToFile2(pairs, file);
-                    filesToMerge.push_back(file);
-                    pairs.clear();
-                }
-
-                TriplePair tp;
-                tp.readFrom(fis);
-                pairs.push_back(tp);
+            //LZ4Reader *fis = new LZ4Reader(fileName);
+            //while (!fis->isEof()) {
+            if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
+                string file = tmpfileprefix + string(".") + to_string(idx++);
+                sortAndDumpToFile2(pairs, file);
+                filesToMerge.push_back(file);
+                pairs.clear();
             }
-            delete fis;
-            fs::remove(fileName);
+
+            TriplePair tp;
+            tp.readFrom(idWriter, reader);
+            pairs.push_back(tp);
+            //}
+            //delete fis;
+            //fs::remove(fileName);
+            //}
         }
 
         if (pairs.size() > 0) {
@@ -3058,12 +3061,22 @@ void Compressor::sortFilesByTripleSource(string kbPath,
         }
     }
 
+    MultiDiskLZ4Reader **readers = new MultiDiskLZ4Reader*[maxReadingThreads];
     DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
+        const int filesPerPart = parallelProcesses / maxReadingThreads;
         outputFiles.push_back(kbPath + string("/listUncommonTerms") + to_string(i));
         writers[i] = new DiskLZ4Writer(outputFiles.back(),
-                                       parallelProcesses / maxReadingThreads,
+                                       filesPerPart,
                                        3);
+        readers[i] = new MultiDiskLZ4Reader(filesPerPart, 3, 10);
+        readers[i]->start();
+        //Add inputs
+        for (int j = 0; j < filesPerPart; ++j) {
+            int idx = j * maxReadingThreads + i;
+            assert(inputFinalSorting[idx].size() < 2);
+            readers[i]->addInput(j, inputFinalSorting[idx]);
+        }
     }
 
     boost::thread *threads = new boost::thread[parallelProcesses - 1];
@@ -3072,13 +3085,14 @@ void Compressor::sortFilesByTripleSource(string kbPath,
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1] = boost::thread(
                              boost::bind(&Compressor::sortByTripleID, this,
-                                         &inputFinalSorting[i],
+                                         //&inputFinalSorting[i],
+                                         readers[i % maxReadingThreads],
                                          writers[i % maxReadingThreads],
                                          i / maxReadingThreads,
                                          kbPath + string("/listUncommonTerms-tmp") + to_string(i),
                                          maxMem));
     }
-    sortByTripleID(&inputFinalSorting[0], writers[0], 0,
+    sortByTripleID(readers[0], /*&inputFinalSorting[0],*/ writers[0], 0,
                    kbPath + string("/listUncommonTerms-tmp") + to_string(0),
                    maxMem);
 
@@ -3091,6 +3105,11 @@ void Compressor::sortFilesByTripleSource(string kbPath,
         delete writers[i];
     }
     delete[] writers;
+    delete[] readers;
+    for (auto files : inputFinalSorting) {
+        for(auto file : files)
+            fs::remove(fs::path(file));
+    }
 }
 
 void Compressor::sortDictionaryEntriesByText(string **input,

@@ -134,6 +134,11 @@ struct TriplePair {
         term = reader->parseLong();
     }
 
+    void readFrom(int idReader, DiskLZ4Reader *reader) {
+        tripleIdAndPosition = reader->readLong(idReader);
+        term = reader->readLong(idReader);
+    }
+
     void writeTo(LZ4Writer *writer) {
         writer->writeLong(tripleIdAndPosition);
         writer->writeLong(term);
@@ -695,7 +700,8 @@ protected:
                                  vector<string> uncommonFiles,
                                  vector<string> &finalUncommonFiles);
 
-    void sortByTripleID(vector<string> *inputFiles,
+    void sortByTripleID(MultiDiskLZ4Reader *reader,
+                        //vector<string> *inputFiles,
                         DiskLZ4Writer *writer,
                         const int idWriter,
                         string tmpfileprefix,
