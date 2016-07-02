@@ -2893,55 +2893,55 @@ void Compressor::sortByTripleID(//vector<string> *inputFiles,
     const int idWriter,
     string tmpfileprefix,
     const long maxMemory) {
+
     //First sort the input files in chunks of x elements
     int idx = 0;
     vector<string> filesToMerge;
-    {
-        vector<TriplePair> pairs;
-        while (!reader->isEOF(idWriter)) {
-            //for (int i = 0; i < inputFiles->size(); ++i) {
-            //Read the file
-            //string fileName = (*inputFiles)[i];
-            //Process the file
-            //LZ4Reader *fis = new LZ4Reader(fileName);
-            //while (!fis->isEof()) {
-            if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
-                string file = tmpfileprefix + string(".") + to_string(idx++);
-                sortAndDumpToFile2(pairs, file);
-                filesToMerge.push_back(file);
-                pairs.clear();
-            }
-
-            TriplePair tp;
-            tp.readFrom(idWriter, reader);
-            pairs.push_back(tp);
-            //}
-            //delete fis;
-            //fs::remove(fileName);
-            //}
+    vector<TriplePair> pairs;
+    while (!reader->isEOF(idWriter)) {
+        if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
+            string file = tmpfileprefix + string(".") + to_string(idx++);
+            sortAndDumpToFile2(pairs, file);
+            filesToMerge.push_back(file);
+            pairs.clear();
         }
 
+        TriplePair tp;
+        tp.readFrom(idWriter, reader);
+        pairs.push_back(tp);
+    }
+
+    if (filesToMerge.empty()) {
+        //Sort them
+        std::sort(pairs.begin(), pairs.end(), TriplePair::sLess);
+        //Dump them inmmediately
+        for (size_t i = 0; i < pairs.size(); ++i) {
+            TriplePair tp = pairs[i];
+            writer->writeLong(idWriter, tp.tripleIdAndPosition);
+            writer->writeLong(idWriter, tp.term);
+        }
+    } else {
         if (pairs.size() > 0) {
             string file = tmpfileprefix + string(".") + to_string(idx++);
             sortAndDumpToFile2(pairs, file);
             filesToMerge.push_back(file);
         }
         pairs.clear();
-    }
 
-    //Then do a merge sort and write down the results on outputFile
-    FileMerger<TriplePair> merger(filesToMerge);
-    while (!merger.isEmpty()) {
-        TriplePair tp = merger.get();
-        writer->writeLong(idWriter, tp.tripleIdAndPosition);
-        writer->writeLong(idWriter, tp.term);
+        //Then do a merge sort and write down the results on outputFile
+        FileMerger<TriplePair> merger(filesToMerge);
+        while (!merger.isEmpty()) {
+            TriplePair tp = merger.get();
+            writer->writeLong(idWriter, tp.tripleIdAndPosition);
+            writer->writeLong(idWriter, tp.term);
+        }
+
+        //Remove the input files
+        for (int i = 0; i < filesToMerge.size(); ++i) {
+            fs::remove(filesToMerge[i]);
+        }
     }
     writer->setTerminated(idWriter);
-
-    //Remove the input files
-    for (int i = 0; i < filesToMerge.size(); ++i) {
-        fs::remove(filesToMerge[i]);
-    }
 }
 
 void Compressor::compressTriples(const int maxReadingThreads,
@@ -3107,7 +3107,7 @@ void Compressor::sortFilesByTripleSource(string kbPath,
     delete[] writers;
     delete[] readers;
     for (auto files : inputFinalSorting) {
-        for(auto file : files)
+        for (auto file : files)
             fs::remove(fs::path(file));
     }
 }
