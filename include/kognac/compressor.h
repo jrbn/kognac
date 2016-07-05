@@ -682,7 +682,7 @@ protected:
                                   DiskLZ4Writer *writer,
                                   const int id);
 
-    void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
+    static void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
 
     void compressTriples(const int maxReadingThreads,
                          const int parallelProcesses,
@@ -693,14 +693,7 @@ protected:
                          vector<string> &finalUncommonFiles, string * tmpFileNames,
                          StringCollection * poolForMap, ByteArrayToNumberMap * finalMap);
 
-    void sortFilesByTripleSource(string kbPath,
-                                 const int maxReadingThreads,
-                                 const int parallelProcesses,
-                                 const int ndicts,
-                                 vector<string> uncommonFiles,
-                                 vector<string> &finalUncommonFiles);
-
-    void sortByTripleID(MultiDiskLZ4Reader *reader,
+    static void sortByTripleID(MultiDiskLZ4Reader *reader,
                         //vector<string> *inputFiles,
                         DiskLZ4Writer *writer,
                         const int idWriter,
@@ -790,6 +783,14 @@ public:
                                             ByteArrayToNumberMap * map,
                                             bool filterDuplicates,
                                             bool sample);
+
+    static void sortFilesByTripleSource(string kbPath,
+                                        const int maxReadingThreads,
+                                        const int parallelProcesses,
+                                        const int ndicts,
+                                        vector<string> uncommonFiles,
+                                        vector<string> &finalUncommonFiles);
+
 
 
 };

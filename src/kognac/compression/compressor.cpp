@@ -3084,8 +3084,7 @@ void Compressor::sortFilesByTripleSource(string kbPath,
                             (long) (Utils::getSystemMemory() * 0.7) / parallelProcesses);
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1] = boost::thread(
-                             boost::bind(&Compressor::sortByTripleID, this,
-                                         //&inputFinalSorting[i],
+                             boost::bind(&Compressor::sortByTripleID,
                                          readers[i % maxReadingThreads],
                                          writers[i % maxReadingThreads],
                                          i / maxReadingThreads,
