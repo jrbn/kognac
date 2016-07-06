@@ -1538,8 +1538,6 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     long *distinctValues = new long[parallelProcesses];
     memset(distinctValues, 0, sizeof(long)*parallelProcesses);
 
-    boost::thread *threads = new boost::thread[parallelProcesses - 1];
-
     /*** If we intend to use Misra to store the popular terms, then we must init
      * it ***/
     vector<string> *resultsMGS = NULL;
@@ -1589,6 +1587,8 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
         writers[i] = new DiskLZ4Writer(tmpFileNames[i], parallelProcesses / maxReadingThreads, 3);
     }
 
+    boost::thread *threads = new boost::thread[parallelProcesses - 1];
+
     ParamsUncompressTriples params;
     //Set only global params
     params.sizeHeap = sampleArg;
@@ -1635,7 +1635,8 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     uncompressTriples(params);
 
     for (int i = 1; i < parallelProcesses; ++i) {
-        threads[i - 1].join();
+        if (threads[i - 1].joinable())
+            threads[i - 1].join();
     }
     for (int i = 0; i < maxReadingThreads; ++i) {
         delete readers[i];
