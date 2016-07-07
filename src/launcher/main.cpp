@@ -136,11 +136,11 @@ int main(int argc, const char **argv) {
     kognac.sample(sampleMethod, sampleArg, sampleArg2, parallelThreads,
                   maxConcurrentThreads);
     BOOST_LOG_TRIVIAL(info) << "Creating the dictionary mapping ...";
-    kognac.compress(parallelThreads, useFP, minSupport);
+    kognac.compress(parallelThreads, maxConcurrentThreads, useFP, minSupport);
 
     if (compressGraph) {
         BOOST_LOG_TRIVIAL(info) << "Compressing the triples ...";
-        kognac.compressGraph(parallelThreads);
+        kognac.compressGraph(parallelThreads, maxConcurrentThreads);
     }
     BOOST_LOG_TRIVIAL(info) << "Done.";
 
