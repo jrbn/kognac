@@ -1376,7 +1376,7 @@ void Compressor::parse(int dictPartitions, int sampleMethod, int sampleArg,
     /*** Merge the schema extractors ***/
     if (copyHashes) {
         BOOST_LOG_TRIVIAL(debug) << "Merge the extracted schema";
-        for (int i = 0; i < maxReadingThreads; ++i) {
+        for (int i = 0; i < parallelProcesses; ++i) {
             schemaExtrator->merge(extractors[i]);
         }
         if (!onlySample) {
@@ -2899,6 +2899,7 @@ void Compressor::sortByTripleID(//vector<string> *inputFiles,
     int idx = 0;
     vector<string> filesToMerge;
     vector<TriplePair> pairs;
+    long count = 0;
     while (!reader->isEOF(idWriter)) {
         if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
             string file = tmpfileprefix + string(".") + to_string(idx++);
@@ -2910,6 +2911,10 @@ void Compressor::sortByTripleID(//vector<string> *inputFiles,
         TriplePair tp;
         tp.readFrom(idWriter, reader);
         pairs.push_back(tp);
+
+        count++;
+        if (count % 10000000 == 0)
+            BOOST_LOG_TRIVIAL(debug) << "Loaded " << count << " Memory so far " << Utils::getUsedMemory();
     }
 
     if (filesToMerge.empty()) {
@@ -3081,6 +3086,8 @@ void Compressor::sortFilesByTripleSource(string kbPath,
             readers[i]->addInput(j, inputFinalSorting[idx]);
         }
     }
+
+    BOOST_LOG_TRIVIAL(debug) << "Start threads ...";
 
     boost::thread *threads = new boost::thread[parallelProcesses - 1];
     const long maxMem = max((long) MIN_MEM_SORT_TRIPLES,

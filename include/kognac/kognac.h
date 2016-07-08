@@ -332,7 +332,9 @@ public:
 
     void compress(const int nthreads,
                   const int nReadingThreads,
-                  const bool useFP, const int minSupport);
+                  const bool useFP,
+                  const int minSupport,
+                  const bool serializeTaxonomy);
 
     void compressGraph(const int nthreads, const int nReadingThreads);
 
