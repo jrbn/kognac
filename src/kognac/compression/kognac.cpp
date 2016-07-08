@@ -663,14 +663,24 @@ void Kognac::assignIdsToAllTerms(string inputdir, long & counter,
     std::vector<string> files = Utils::getFiles(inputdir);
     assert(files.size() == 1);
     LZ4Reader reader(files.front());
+
     long classId = -1;
+    long prevCounter = 0;
+
     while (!reader.isEof()) {
         Kognac_TextClassID el;
         el.readFrom(&reader);
-        if (el.classID != classId)
-            BOOST_LOG_TRIVIAL(debug) << "ClassID: " << el.classID << " first count " << counter;
+        if (el.classID != classId) {
+            BOOST_LOG_TRIVIAL(debug) << "ClassID: " << el.classID <<
+                                     " first count " << counter;
+            //Update an internal data structure
+            if (classId != -1) {
+                extractor.addClassesBeginEndRange(classId, prevCounter, counter);
+                prevCounter = counter;
+            }
+            classId = el.classID;
+        }
         assert(el.classID >= classId);
-        classId = el.classID;
         out << to_string(counter) << " " << to_string(el.size) << " ";
         out.write(el.term, el.size);
         out << endl;
@@ -772,7 +782,6 @@ void Kognac::pickSmallestClassIDPart(string inputFile, const bool useFP) {
                 lastEl.classID = minClass;
                 lastEl.classID2 = 0;
                 lastEl.writeTo(&writer);
-
                 memcpy(supportBuffer, el.term, el.size);
                 sSupportBuffer = el.size;
                 minClass = LONG_MAX;
@@ -795,6 +804,7 @@ void Kognac::pickSmallestClassIDPart(string inputFile, const bool useFP) {
         char supportBuffer[MAX_TERM_SIZE + 2];
         size_t sSupportBuffer = 0;
         long minClass = LONG_MAX;
+        const std::vector<long> *taxonomyClasses;
         bool first = true;
         while (!reader.isEof()) {
             Kognac_TextClassID el;
@@ -812,12 +822,13 @@ void Kognac::pickSmallestClassIDPart(string inputFile, const bool useFP) {
                 lastEl.classID = minClass;
                 lastEl.classID2 = 0;
                 lastEl.writeTo(&writer);
-
                 memcpy(supportBuffer, el.term, el.size);
                 sSupportBuffer = el.size;
                 minClass = el.classID;
-            } else if (el.classID < minClass) {
-                minClass = el.classID;
+            }
+            extractor.retrieveInstances(el.classID, &taxonomyClasses);
+            if (taxonomyClasses && taxonomyClasses->at(0) < minClass) {
+                minClass = taxonomyClasses->at(0);
             }
         }
 
@@ -1129,7 +1140,7 @@ void Kognac::extractAllTermsWithClassIDsNOFP_int(const long maxMem,
     char tmpO[MAX_TERM_SIZE + 2];
 
     //Output: I create n outputs, depending on the hash of the terms
-    Kognac_TermBufferWriter writer(maxMem, nthreads, outputfile, true);
+    Kognac_TermBufferWriter writer(maxMem, nthreads, outputfile, false);
 
     while (!reader->isEOF(idReader)) {
         //Read the three fields
@@ -1357,7 +1368,6 @@ void Kognac_TermBufferWriter::dumpBuffer(const int partition) {
             prev = &(*itr);
             countWritten++;
         } else {
-            //BOOST_LOG_TRIVIAL(debug) << "Duplicated: " << string(prev->term, prev->size) << " " << string(itr->term, itr->size) << " " << prev->classID << " " << itr->classID;
         }
     }
 

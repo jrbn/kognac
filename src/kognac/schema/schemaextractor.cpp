@@ -319,10 +319,11 @@ void SchemaExtractor::transitiveClosure(NumericNPSchemaMap &map, ExtNode *node) 
     }
 
     addToMap(map, node->key, node->assignedID);
-    while (node->parent != NULL) {
+
+    /*while (node->parent != NULL) {
         addToMap(map, node->key, node->parent->assignedID);
         node = node->parent;
-    }
+    }*/
 }
 
 SchemaExtractor::~SchemaExtractor() {
@@ -338,6 +339,13 @@ void SchemaExtractor::deallocateTree(ExtNode *node) {
         deallocateTree(node->sibling);
     }
     delete node;
+}
+
+string SchemaExtractor::getText(long id) const {
+    if (hashMappings.count(id)) {
+        return hashMappings.find(id)->second;
+    }
+    return "";
 }
 
 void SchemaExtractor::assignID(ExtNode *root, long &counterID) {
@@ -437,6 +445,10 @@ void SchemaExtractor::processClasses(SchemaMap &map, NumericNPSchemaMap &omap) {
 
     //Compute the transitive closure
     transitiveClosure(omap, root);
+    //Sort the values
+    for(auto itr = omap.begin(); itr != omap.end(); itr++) {
+        std::sort(itr->second.begin(), itr->second.end());
+    }
 
     BOOST_LOG_TRIVIAL(debug) << "Members of " << omap.size() <<
                              " classes have a clustering ID";
@@ -678,7 +690,7 @@ void SchemaExtractor::rearrangeWithPatterns(
     transitiveClosure(outputSubclasses, root);
 }
 
-string getText(map<long, string> &map, long hash) {
+string _getText(map<long, string> &map, long hash) {
     string out;
     if (map.count(hash)) {
         out = map.find(hash)->second;
@@ -694,9 +706,9 @@ string getText(map<long, string> &map, long hash) {
 
 void SchemaExtractor::serializeNode(boost::iostreams::filtering_ostream &out,
                                     ExtNode *node) {
-    string sk = getText(hashMappings, node->key);
+    string sk = _getText(hashMappings, node->key);
     if (node->parent != NULL) {
-        string spk = getText(hashMappings, node->parent->key);
+        string spk = _getText(hashMappings, node->parent->key);
         out << sk << "\t" << spk << endl;
     } else {
         out << sk << "\tNULL" << endl;
@@ -711,6 +723,27 @@ void SchemaExtractor::serializeNode(boost::iostreams::filtering_ostream &out,
     }
 }
 
+void SchemaExtractor::serializeNodeBeginRange(boost::iostreams::filtering_ostream &out,
+        ExtNode *node) {
+    string sk = _getText(hashMappings, node->key);
+    const long classID = node->assignedID;
+    if (classesRanges.count(classID)) {
+        auto det = classesRanges.find(classID);
+        out << sk << "\t" << node->assignedID << "\t" << det->second.first << "\t" << det->second.second << endl;
+    } else {
+        out << sk << "\t" << node->assignedID << endl;
+    }
+
+    ExtNode *s = node->sibling;
+    if (s != NULL) {
+        serializeNodeBeginRange(out, s);
+    }
+    if (node->child != NULL) {
+        serializeNodeBeginRange(out, node->child);
+    }
+
+}
+
 void SchemaExtractor::serialize(string outputFile) {
     std::ofstream fout(outputFile, ios_base::binary);
     boost::iostreams::filtering_ostream out;
@@ -719,8 +752,18 @@ void SchemaExtractor::serialize(string outputFile) {
     }
     out.push(fout);
 
+    out << "#Ranges#" << endl;
+    serializeNodeBeginRange(out, root);
+
+    out << "#Taxonomy#" << endl;
     serializeNode(out, root);
 
     out.reset();
     fout.close();
+}
+
+void SchemaExtractor::addClassesBeginEndRange(const long classId,
+        const long start,
+        const long end) {
+    classesRanges.insert(make_pair(classId, make_pair(start, end)));
 }

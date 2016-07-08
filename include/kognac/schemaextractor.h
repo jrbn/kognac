@@ -94,6 +94,9 @@ private:
     void serializeNode(boost::iostreams::filtering_ostream &out,
                        ExtNode *node);
 
+    void serializeNodeBeginRange(boost::iostreams::filtering_ostream &out,
+                                 ExtNode *node);
+
 protected:
     StringCollection supportSubclasses;
     SchemaMap subclasses;
@@ -107,6 +110,7 @@ protected:
     DomainRangeMap ranges;
 
     map<long, string> hashMappings;
+    map<long, std::pair<long, long>> classesRanges;
 
     /*SetEstimation propertyCardinality;
     google::dense_hash_map<long, long> propertiesID;*/
@@ -121,7 +125,7 @@ public:
 
     void extractSchema(char **triple);
 
-    void merge(SchemaExtractor &schema);
+    void merge(SchemaExtractor & schema);
 
     void prepare();
 
@@ -146,7 +150,13 @@ public:
 
     std::set<string> getAllClasses() const;
 
+    string getText(long id) const;
+
     void retrieveInstances(const long term, const vector<long> **output) const;
+
+    void addClassesBeginEndRange(const long classId,
+                                 const long start,
+                                 const long end);
 
     ~SchemaExtractor();
 };
