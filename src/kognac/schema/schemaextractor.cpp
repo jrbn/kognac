@@ -189,6 +189,12 @@ void SchemaExtractor::merge(SchemaExtractor & schema) {
             ranges.insert(make_pair(itr->first, itr->second));
         }
     }
+
+    for (auto it : schema.hashMappings) {
+        if (!hashMappings.count(it.first)) {
+            hashMappings.insert(make_pair(it.first, it.second));
+        }
+    }
 };
 
 bool SchemaExtractor::isReachable(NumericSchemaMap &map, vector<long> &prevEls,
