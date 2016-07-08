@@ -435,7 +435,7 @@ void SchemaExtractor::processClasses(SchemaMap &map, NumericNPSchemaMap &omap) {
     assignID(root, counterID);
     //printTree(0,root);
 
-    //Compute the transitive closure and deallocate all the trees
+    //Compute the transitive closure
     transitiveClosure(omap, root);
 
     BOOST_LOG_TRIVIAL(debug) << "Members of " << omap.size() <<
