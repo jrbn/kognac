@@ -2918,6 +2918,7 @@ void Compressor::sortByTripleID(//vector<string> *inputFiles,
     }
 
     if (filesToMerge.empty()) {
+        BOOST_LOG_TRIVIAL(debug) << "Sorting and dumping all triples";
         //Sort them
         std::sort(pairs.begin(), pairs.end(), TriplePair::sLess);
         //Dump them inmmediately
@@ -2927,6 +2928,7 @@ void Compressor::sortByTripleID(//vector<string> *inputFiles,
             writer->writeLong(idWriter, tp.term);
         }
     } else {
+        BOOST_LOG_TRIVIAL(debug) << "Start merging the fragments";
         if (pairs.size() > 0) {
             string file = tmpfileprefix + string(".") + to_string(idx++);
             sortAndDumpToFile2(pairs, file);
