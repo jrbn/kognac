@@ -3041,6 +3041,8 @@ void Compressor::sortFilesByTripleSource(string kbPath,
         const int ndicts, vector<string> uncommonFiles,
         vector<string> &outputFiles) {
 
+	BOOST_LOG_TRIVIAL(debug) << "Memory used so far: " << Utils::getUsedMemory();
+
     /*** Sort the files which contain the triple source ***/
     vector<vector<string>> inputFinalSorting(parallelProcesses);
 
