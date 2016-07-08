@@ -200,11 +200,6 @@ void Kognac::compress(const int nthreads,
     //Close the file
     fout.close();
 
-
-    for (auto el : splittedInput) {
-        fs::remove(fs::path(el));
-    }
-
     if (serializeTaxonomy) {
         BOOST_LOG_TRIVIAL(info) << "Serializing the taxonomy ...";
         string path = outputPath + string("/taxonomy.gz");
@@ -397,11 +392,13 @@ void Kognac::compressGraph(const int nthreads, const int nReadingThreads) {
             if (filesToProcess.size() > nthreads) {
                 BOOST_LOG_TRIVIAL(info) << "There should not be more files than available threads";
                 throw 10;
+            } else if (filesToProcess.size() == 0) {
+                break;
             } else if (filesToProcess.size() != nReadingThreads) {
                 BOOST_LOG_TRIVIAL(error) << "The number of files should be equal to the number of reading threads";
                 throw 10;
-            } else if (filesToProcess.size() == 0)
-                break;
+            }
+
 
             //Set up the input
             DiskLZ4Reader **readers = new DiskLZ4Reader*[nReadingThreads];
@@ -427,7 +424,7 @@ void Kognac::compressGraph(const int nthreads, const int nReadingThreads) {
             }
 
             //Join the threads
-            for (int i = 0; i < filesToProcess.size(); ++i) {
+            for (int i = 0; i < nthreads; ++i) {
                 threads[i].join();
             }
             delete[] threads;
@@ -1067,7 +1064,7 @@ void Kognac::extractAllTermsWithClassIDs(const int nthreads,
 }
 
 void Kognac::extractAllTermsWithClassIDs_int(const long maxMem,
-        DiskLZ4Reader *reader,
+        DiskLZ4Reader * reader,
         const int idReader,
         string outputfile,
         ByteArrayToNumberMap * frequentTermsMap,
@@ -1120,7 +1117,7 @@ void Kognac::extractAllTermsWithClassIDs_int(const long maxMem,
 }
 
 void Kognac::extractAllTermsWithClassIDsNOFP_int(const long maxMem,
-        DiskLZ4Reader *reader,
+        DiskLZ4Reader * reader,
         int idReader,
         string outputfile,
         ByteArrayToNumberMap * frequentTermsMap,
@@ -1281,6 +1278,7 @@ Kognac::~Kognac() {
     for (std::vector<string>::iterator itr = splittedInput.begin();
             itr != splittedInput.end(); ++itr) {
         fs::remove(*itr);
+        fs::remove(fs::path(*itr + ".idx"));
     }
 }
 
