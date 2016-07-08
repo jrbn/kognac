@@ -88,7 +88,9 @@ const std::set<string> &elements) const {
 
 void Kognac::compress(const int nthreads,
                       const int nReadingThreads,
-                      const bool useFP, const int minSupport) {
+                      const bool useFP,
+                      const int minSupport,
+                      const bool serializeTaxonomy) {
 
     BOOST_LOG_TRIVIAL(debug) << "Used memory at this moment " <<
                              Utils::getUsedMemory();
@@ -131,14 +133,17 @@ void Kognac::compress(const int nthreads,
         }
 
         //Annotate each term with a class ID
-        BOOST_LOG_TRIVIAL(info) << "Annotate the terms with class info ... [threads=" << nthreads << "]";
+        BOOST_LOG_TRIVIAL(info) << "Annotate the terms with class info ...[threads = "
+                                << nthreads << "]";
         string tmpDir = outputPath + string("/extractedTerms");
         fs::create_directories(fs::path(tmpDir));
         extractAllTermsWithClassIDs(nthreads, nReadingThreads,
                                     useFP, tmpDir, frequentTermsMap,
                                     classesWithFrequency);
 
-        BOOST_LOG_TRIVIAL(info) << "Sort and merge the terms by text ... [threads=" << nthreads << "]";
+        BOOST_LOG_TRIVIAL(info) << "Sort and merge the terms by text ... [threads = "
+                                << nthreads << "]";
+
         if (useFP) {
             //Sort all terms by the textual ID. Get the frequent patterns
             frequentPatterns = std::shared_ptr <
@@ -150,33 +155,34 @@ void Kognac::compress(const int nthreads,
             throw 10;
             //Not supported. I must implement a container first
             /*std::vector<FPattern<unsigned long>> patterns =
-                                                  frequentPatterns->
-                                                  getFreqPatterns(minSupport);
+            frequentPatterns->
+            getFreqPatterns(minSupport);
 
             //Store all the patterns in one file
-            ofstream patternFile(outputPath + "/logs_patterns");
+            ofstream patternFile(outputPath + " / logs_patterns");
             for (auto &pattern : patterns) {
-                if (pattern.patternElements.size() > 1) {
-                    string line = "s=" + to_string(pattern.support) + " {";
-                    for (auto &el : pattern.patternElements) {
-                        line += " " + classesHash2.find(el)->second +
-                                " " + to_string(el);
-                    }
-                    line += "}";
-                    patternFile << line << endl;
-                }
-            }
+            if (pattern.patternElements.size() > 1) {
+            string line = "s = " + to_string(pattern.support) + " {";
+                                                                   for (auto &el : pattern.patternElements) {
+                                                                   line += " " + classesHash2.find(el)->second +
+                                                                   " " + to_string(el);
+                                                               }
+                                                                   line += "
+                                                                  }";
+                               patternFile << line << endl;
+                           }
+                           }
 
-            BOOST_LOG_TRIVIAL(info) << "Rearranging tree ...";
-            auto classes = frequentPatterns->getClassesSupport();
-            extractor.rearrangeWithPatterns(classes, patterns);*/
+                               BOOST_LOG_TRIVIAL(info) << "Rearranging tree ...";
+                               auto classes = frequentPatterns->getClassesSupport();
+                               extractor.rearrangeWithPatterns(classes, patterns);*/
             //extractor.printTree();
         } else {
             mergeAllTermsWithClassIDs(nthreads, tmpDir);
         }
 
         //For each term, pick the smallest class ID
-        BOOST_LOG_TRIVIAL(info) << "Pick smallest class IDs ... [threads=" << nthreads << "]";
+        BOOST_LOG_TRIVIAL(info) << "Pick smallest class IDs ... [threads = " << nthreads << "]";
         pickSmallestClassID(nthreads, tmpDir, useFP);
 
         //Re-sort the terms by class ID
@@ -193,6 +199,17 @@ void Kognac::compress(const int nthreads,
     }
     //Close the file
     fout.close();
+
+
+    for (auto el : splittedInput) {
+        fs::remove(fs::path(el));
+    }
+
+    if (serializeTaxonomy) {
+        BOOST_LOG_TRIVIAL(info) << "Serializing the taxonomy ...";
+        string path = outputPath + string("/taxonomy.gz");
+        extractor.serialize(path);
+    }
 
     compr = std::unique_ptr<Compressor>();
 }
@@ -540,7 +557,7 @@ void Kognac::sortCompressedGraph(string inputDir, string outputFile, int v) {
         } else {
             cmp c;
             std::sort(inmemorytriples.begin(), inmemorytriples.end(), c);
-            BOOST_LOG_TRIVIAL(debug) << "inmemorytriples=" << inmemorytriples.size();
+            BOOST_LOG_TRIVIAL(debug) << "inmemorytriples = " << inmemorytriples.size();
             long prevs = -1;
             long prevp = -1;
             long prevo = -1;
@@ -1235,26 +1252,26 @@ void Kognac::processTerm(Kognac_TermBufferWriter & writer, const int pos,
     } else {
         //long hashTerm = Hashes::murmur3_56(term + 2, sizeTerm);
         /*** long minClass = LONG_MAX;
-        minClass = writer.getClassFromCache2(term + 2, sizeTerm);
+                                       minClass = writer.getClassFromCache2(term + 2, sizeTerm);
 
-        const std::vector<long> *taxonomyClasses = NULL;
-        extractor.retrieveInstances(classID, &taxonomyClasses);
-        if (taxonomyClasses) {
-            if (taxonomyClasses->at(0) < minClass) {
-                classID = taxonomyClasses->at(0);
-                //Add it in the cache
-                writer.insertInCache2(term + 2, sizeTerm, classID);
-            } else {
-                return;
-            }
-        } else {
-            if (minClass < LONG_MAX) {
-                //I already inserted it
-                return;
-            }
-            classID = LONG_MAX;
-            writer.insertInCache2(term + 2, sizeTerm, classID - 1);
-        }***/
+                                       const std::vector<long> *taxonomyClasses = NULL;
+                                       extractor.retrieveInstances(classID, &taxonomyClasses);
+                                       if (taxonomyClasses) {
+                                       if (taxonomyClasses->at(0) < minClass) {
+                                       classID = taxonomyClasses->at(0);
+        //Add it in the cache
+                                       writer.insertInCache2(term + 2, sizeTerm, classID);
+                                   } else {
+                                       return;
+                                   }
+                                   } else {
+                                       if (minClass < LONG_MAX) {
+        //I already inserted it
+                                       return;
+                                   }
+                                       classID = LONG_MAX;
+                                       writer.insertInCache2(term + 2, sizeTerm, classID - 1);
+                                   }***/
         pair.classID = classID;
         writer.write(pair);
     }

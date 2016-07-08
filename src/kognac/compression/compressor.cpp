@@ -1376,7 +1376,7 @@ void Compressor::parse(int dictPartitions, int sampleMethod, int sampleArg,
     /*** Merge the schema extractors ***/
     if (copyHashes) {
         BOOST_LOG_TRIVIAL(debug) << "Merge the extracted schema";
-        for (int i = 0; i < maxReadingThreads; ++i) {
+        for (int i = 0; i < parallelProcesses; ++i) {
             schemaExtrator->merge(extractors[i]);
         }
         if (!onlySample) {

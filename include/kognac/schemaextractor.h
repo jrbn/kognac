@@ -27,6 +27,8 @@
 #include <kognac/hashmap.h>
 #include <kognac/fpgrowth.h>
 
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
 #include <sparsehash/dense_hash_map>
 #include <sparsehash/dense_hash_set>
 #include <string>
@@ -89,7 +91,8 @@ private:
 
     void printTree(int padding, ExtNode *root);
 
-    //void sortPropertiesByRanking(SetEstimation &est);
+    void serializeNode(boost::iostreams::filtering_ostream &out,
+                       ExtNode *node);
 
 protected:
     StringCollection supportSubclasses;
@@ -103,22 +106,14 @@ protected:
     DomainRangeMap domains;
     DomainRangeMap ranges;
 
+    map<long, string> hashMappings;
+
     /*SetEstimation propertyCardinality;
     google::dense_hash_map<long, long> propertiesID;*/
 
     ExtNode *root;
 
 public:
-
-#ifdef DEBUG
-    //static StringCollection support;
-    google::dense_hash_map<long, const char*> hashMappings;
-    //static google::dense_hash_map<long, const char*> mappings;
-    //static bool isSet;
-    //static void initMap();
-    //static google::dense_hash_map<long, const char*> properties;
-#endif
-
     static const long HASHCLASS;
     static const long HASHTYPE;
 
@@ -133,6 +128,8 @@ public:
     void printTree() {
         printTree(0, root);
     }
+
+    void serialize(string file);
 
     void rearrangeWithPatterns(std::map<unsigned long, unsigned long> &classes,
                                std::vector<FPattern<unsigned long>> &patterns);
