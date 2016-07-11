@@ -2913,7 +2913,7 @@ void Compressor::sortByTripleID(//vector<string> *inputFiles,
         pairs.push_back(tp);
 
         count++;
-        if (count % 10000000 == 0)
+        if (count % 100000000 == 0)
             BOOST_LOG_TRIVIAL(debug) << "Loaded " << count << " Memory so far " << Utils::getUsedMemory();
     }
 
