@@ -2966,6 +2966,7 @@ void Compressor::compressTriples(const int maxReadingThreads,
     /*** Compress the triples ***/
     int iter = 0;
     while (areFilesToCompress(parallelProcesses, tmpFileNames)) {
+        BOOST_LOG_TRIVIAL(debug) << "Start iteration " << iter;
         string prefixOutputFile = "input-" + to_string(iter);
 
         DiskLZ4Reader **readers = new DiskLZ4Reader*[maxReadingThreads];
@@ -3039,6 +3040,7 @@ void Compressor::compressTriples(const int maxReadingThreads,
         //New iteration!
         finalMap->clear();
         iter++;
+        BOOST_LOG_TRIVIAL(debug) << "Finish iteration";
     }
 }
 
@@ -3048,7 +3050,7 @@ void Compressor::sortFilesByTripleSource(string kbPath,
         const int ndicts, vector<string> uncommonFiles,
         vector<string> &outputFiles) {
 
-	BOOST_LOG_TRIVIAL(debug) << "Memory used so far: " << Utils::getUsedMemory();
+    BOOST_LOG_TRIVIAL(debug) << "Memory used so far: " << Utils::getUsedMemory();
 
     /*** Sort the files which contain the triple source ***/
     vector<vector<string>> inputFinalSorting(parallelProcesses);
@@ -3093,7 +3095,7 @@ void Compressor::sortFilesByTripleSource(string kbPath,
 
     boost::thread *threads = new boost::thread[parallelProcesses - 1];
     const long maxMem = max((long) MIN_MEM_SORT_TRIPLES,
-                            (long) (Utils::getSystemMemory() * 0.7) / parallelProcesses);
+                            (long) (Utils::getSystemMemory() * 0.6) / parallelProcesses);
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1] = boost::thread(
                              boost::bind(&Compressor::sortByTripleID,
@@ -3238,6 +3240,7 @@ void Compressor::compress(string * permDirs, int nperms, int signaturePerms,
     delete finalMap;
     poolForMap = NULL;
     finalMap = NULL;
+    BOOST_LOG_TRIVIAL(debug) << "Compression is finished";
 }
 
 bool stringComparator(string stringA, string stringB) {
