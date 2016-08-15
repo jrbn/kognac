@@ -43,7 +43,7 @@ public:
                                          string fileOutput);
 
     static void mergeSort(string inputDir, int nThreads, bool initialSorting,
-                          int recordsInitialMemorySort, int filesPerMerge);
+                          long recordsInitialMemorySort, int filesPerMerge);
 
     template<class K>
     static vector<string> sortFiles(vector<string> inputFiles,

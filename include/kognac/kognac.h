@@ -257,20 +257,26 @@ private:
                                      long &counter,
                                      boost::iostreams::filtering_ostream &out);
 
-    void extractAllTermsWithClassIDs(const int nthreads, const bool useFP,
+    void extractAllTermsWithClassIDs(const int nthreads,
+                                     const int nReadingThreads,
+                                     const bool useFP,
                                      string outputdir,
                                      ByteArrayToNumberMap &frequentTermsMap,
                                      std::map<unsigned long, unsigned long> &c);
 
     void extractAllTermsWithClassIDs_int(const long maxMem,
-                                         string inputfile, string outputfile,
+                                         DiskLZ4Reader *reader,
+                                         const int idReader,
+                                         string outputfile,
                                          ByteArrayToNumberMap *frequentTermsMap,
                                          std::map<unsigned long,
                                          unsigned long> *frequencyClasses,
                                          const int nthreads);
 
     void extractAllTermsWithClassIDsNOFP_int(const long maxMem,
-            string inputfile, string outputfile,
+            DiskLZ4Reader *reader,
+            int idReader,
+            string outputfile,
             ByteArrayToNumberMap *frequentTermsMap,
             std::map<unsigned long,
             unsigned long> *frequencyClasses,
@@ -302,14 +308,16 @@ private:
                            CompressedByteArrayToNumberMap &map,
                            StringCollection &supportDictionaryMap);
 
-    long getIDOrText(LZ4Reader &reader, int &size, char *text,
+    long getIDOrText(DiskLZ4Reader *reader, const int idReader,
+                     int &size, char *text,
                      const CompressedByteArrayToNumberMap &map);
 
     void addTransactionToFrequentPatterns(
         std::vector<std::pair<unsigned long,
         unsigned long>> &classes);
 
-    void compressGraph_seq(string input, string outputUncompressed,
+    void compressGraph_seq(DiskLZ4Reader *reader,
+                           int idReader, string outputUncompressed,
                            const bool firstPass,
                            CompressedByteArrayToNumberMap *map,
                            long *countCompressedTriples,
@@ -322,9 +330,13 @@ public:
                 const int sampleArg2, const int parallelThreads,
                 const int maxConcurrentThreads);
 
-    void compress(const int nthreads, const bool useFP, const int minSupport);
+    void compress(const int nthreads,
+                  const int nReadingThreads,
+                  const bool useFP,
+                  const int minSupport,
+                  const bool serializeTaxonomy);
 
-    void compressGraph(const int nthreads);
+    void compressGraph(const int nthreads, const int nReadingThreads);
 
     static void sortCompressedGraph(string inputFile, string outputFile, int v = 0);
 

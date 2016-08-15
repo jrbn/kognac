@@ -21,6 +21,7 @@
 
 #include <kognac/kognac.h>
 #include <kognac/filemerger.h>
+#include <kognac/disklz4reader.h>
 
 #include <boost/algorithm/string.hpp>
 #include <algorithm>
@@ -85,7 +86,11 @@ const std::set<string> &elements) const {
     return out;
 }*/
 
-void Kognac::compress(const int nthreads, const bool useFP, const int minSupport) {
+void Kognac::compress(const int nthreads,
+                      const int nReadingThreads,
+                      const bool useFP,
+                      const int minSupport,
+                      const bool serializeTaxonomy) {
 
     BOOST_LOG_TRIVIAL(debug) << "Used memory at this moment " <<
                              Utils::getUsedMemory();
@@ -128,13 +133,17 @@ void Kognac::compress(const int nthreads, const bool useFP, const int minSupport
         }
 
         //Annotate each term with a class ID
-        BOOST_LOG_TRIVIAL(info) << "Annotate the terms with class info ... [threads=" << nthreads << "]";
+        BOOST_LOG_TRIVIAL(info) << "Annotate the terms with class info ...[threads = "
+                                << nthreads << "]";
         string tmpDir = outputPath + string("/extractedTerms");
         fs::create_directories(fs::path(tmpDir));
-        extractAllTermsWithClassIDs(nthreads, useFP, tmpDir, frequentTermsMap,
+        extractAllTermsWithClassIDs(nthreads, nReadingThreads,
+                                    useFP, tmpDir, frequentTermsMap,
                                     classesWithFrequency);
 
-        BOOST_LOG_TRIVIAL(info) << "Sort and merge the terms by text ... [threads=" << nthreads << "]";
+        BOOST_LOG_TRIVIAL(info) << "Sort and merge the terms by text ... [threads = "
+                                << nthreads << "]";
+
         if (useFP) {
             //Sort all terms by the textual ID. Get the frequent patterns
             frequentPatterns = std::shared_ptr <
@@ -146,33 +155,34 @@ void Kognac::compress(const int nthreads, const bool useFP, const int minSupport
             throw 10;
             //Not supported. I must implement a container first
             /*std::vector<FPattern<unsigned long>> patterns =
-                                                  frequentPatterns->
-                                                  getFreqPatterns(minSupport);
+            frequentPatterns->
+            getFreqPatterns(minSupport);
 
             //Store all the patterns in one file
-            ofstream patternFile(outputPath + "/logs_patterns");
+            ofstream patternFile(outputPath + " / logs_patterns");
             for (auto &pattern : patterns) {
-                if (pattern.patternElements.size() > 1) {
-                    string line = "s=" + to_string(pattern.support) + " {";
-                    for (auto &el : pattern.patternElements) {
-                        line += " " + classesHash2.find(el)->second +
-                                " " + to_string(el);
-                    }
-                    line += "}";
-                    patternFile << line << endl;
-                }
-            }
+            if (pattern.patternElements.size() > 1) {
+            string line = "s = " + to_string(pattern.support) + " {";
+                                                                   for (auto &el : pattern.patternElements) {
+                                                                   line += " " + classesHash2.find(el)->second +
+                                                                   " " + to_string(el);
+                                                               }
+                                                                   line += "
+                                                                  }";
+                               patternFile << line << endl;
+                           }
+                           }
 
-            BOOST_LOG_TRIVIAL(info) << "Rearranging tree ...";
-            auto classes = frequentPatterns->getClassesSupport();
-            extractor.rearrangeWithPatterns(classes, patterns);*/
+                               BOOST_LOG_TRIVIAL(info) << "Rearranging tree ...";
+                               auto classes = frequentPatterns->getClassesSupport();
+                               extractor.rearrangeWithPatterns(classes, patterns);*/
             //extractor.printTree();
         } else {
             mergeAllTermsWithClassIDs(nthreads, tmpDir);
         }
 
         //For each term, pick the smallest class ID
-        BOOST_LOG_TRIVIAL(info) << "Pick smallest class IDs ... [threads=" << nthreads << "]";
+        BOOST_LOG_TRIVIAL(info) << "Pick smallest class IDs ... [threads = " << nthreads << "]";
         pickSmallestClassID(nthreads, tmpDir, useFP);
 
         //Re-sort the terms by class ID
@@ -189,6 +199,12 @@ void Kognac::compress(const int nthreads, const bool useFP, const int minSupport
     }
     //Close the file
     fout.close();
+
+    if (serializeTaxonomy) {
+        BOOST_LOG_TRIVIAL(info) << "Serializing the taxonomy ...";
+        string path = outputPath + string("/taxonomy.gz");
+        extractor.serialize(path);
+    }
 
     compr = std::unique_ptr<Compressor>();
 }
@@ -232,15 +248,15 @@ void Kognac::loadDictionaryMap(boost::iostreams::filtering_istream &in,
                              map.size() << " terms";
 }
 
-long Kognac::getIDOrText(LZ4Reader &reader, int &size, char *text,
+long Kognac::getIDOrText(DiskLZ4Reader *reader, int idReader, int &size, char *text,
                          const CompressedByteArrayToNumberMap &map) {
-    char flag = reader.parseByte();
+    char flag = reader->readByte(idReader);
     long term = -1;
     if (flag) {
-        term = reader.parseLong();
+        term = reader->readLong(idReader);
     } else {
         //try to compress it
-        const char *tmpPointer = reader.parseString(size);
+        const char *tmpPointer = reader->readString(idReader, size);
         if (map.count(tmpPointer)) {
             term = map.find(tmpPointer)->second;
         } else {
@@ -250,7 +266,8 @@ long Kognac::getIDOrText(LZ4Reader &reader, int &size, char *text,
     return term;
 }
 
-void Kognac::compressGraph_seq(string input, string outputUncompressed,
+void Kognac::compressGraph_seq(DiskLZ4Reader *reader, const int idReader,
+                               string outputUncompressed,
                                const bool firstPass,
                                CompressedByteArrayToNumberMap *map,
                                long *countCompressedTriples,
@@ -265,12 +282,11 @@ void Kognac::compressGraph_seq(string input, string outputUncompressed,
     //Compress it
     {
         LZ4Writer tmpWriter(outputUncompressed);
-        LZ4Reader reader(input);
         long counter = 0;
-        while (!reader.isEof()) {
-            const long s = getIDOrText(reader, s1, supportBuffer1, *map);
-            const long p = getIDOrText(reader, s2, supportBuffer2, *map);
-            const long o = getIDOrText(reader, s3, supportBuffer3, *map);
+        while (!reader->isEOF(idReader)) {
+            const long s = getIDOrText(reader, idReader, s1, supportBuffer1, *map);
+            const long p = getIDOrText(reader, idReader, s2, supportBuffer2, *map);
+            const long o = getIDOrText(reader, idReader, s3, supportBuffer3, *map);
             if (s >= 0 && p >= 0 && o >= 0) {
                 c++;
                 //triple is fully compressed
@@ -312,16 +328,12 @@ void Kognac::compressGraph_seq(string input, string outputUncompressed,
         }
     }
     *countCompressedTriples += c;
-    if (!firstPass) {
-        //Remove the file generated in the previous iteration
-        fs::remove(fs::path(input));
-    }
     if (!nonempty) {
         fs::remove(fs::path(outputUncompressed));
     }
 }
 
-void Kognac::compressGraph(const int nthreads) {
+void Kognac::compressGraph(const int nthreads, const int nReadingThreads) {
 
     BOOST_LOG_TRIVIAL(debug) << "Used memory at this moment " <<
                              Utils::getUsedMemory();
@@ -380,34 +392,50 @@ void Kognac::compressGraph(const int nthreads) {
             if (filesToProcess.size() > nthreads) {
                 BOOST_LOG_TRIVIAL(info) << "There should not be more files than available threads";
                 throw 10;
-            } else if (filesToProcess.size() == 0)
+            } else if (filesToProcess.size() == 0) {
                 break;
+            } else if (filesToProcess.size() != nReadingThreads) {
+                BOOST_LOG_TRIVIAL(error) << "The number of files should be equal to the number of reading threads";
+                throw 10;
+            }
+
+
+            //Set up the input
+            DiskLZ4Reader **readers = new DiskLZ4Reader*[nReadingThreads];
+            for (int i = 0; i < nReadingThreads; ++i) {
+                readers[i] = new DiskLZ4Reader(inputFiles[i],
+                                               nthreads / nReadingThreads, 3);
+            }
 
             boost::thread *threads = new boost::thread[nthreads];
-            int idxThread = 0;
-            for (const auto el : filesToProcess) {
+            for (int idxThread = 0; idxThread < nthreads; ++idxThread) {
                 threads[idxThread] = boost::thread(
                                          boost::bind(
                                              &Kognac::compressGraph_seq,
                                              this,
-                                             el,
+                                             readers[idxThread % nReadingThreads],
+                                             idxThread / nReadingThreads,
                                              workingDir + "/file" +
                                              to_string(incr++),
                                              firstPass,
                                              &map,
                                              counters.get() + idxThread,
                                              finalWriters[idxThread]));
-                idxThread++;
             }
 
             //Join the threads
-            for (int i = 0; i < filesToProcess.size(); ++i) {
+            for (int i = 0; i < nthreads; ++i) {
                 threads[i].join();
             }
             delete[] threads;
             if (firstPass) {
                 firstPass = false;
             }
+
+            for (int i = 0; i < nReadingThreads; ++i) {
+                delete readers[i];
+            }
+            delete[] readers;
         }
         long countCompressedTriples = 0;
         for (int i = 0; i < nthreads; ++i) {
@@ -526,7 +554,7 @@ void Kognac::sortCompressedGraph(string inputDir, string outputFile, int v) {
         } else {
             cmp c;
             std::sort(inmemorytriples.begin(), inmemorytriples.end(), c);
-            BOOST_LOG_TRIVIAL(debug) << "inmemorytriples=" << inmemorytriples.size();
+            BOOST_LOG_TRIVIAL(debug) << "inmemorytriples = " << inmemorytriples.size();
             long prevs = -1;
             long prevp = -1;
             long prevo = -1;
@@ -635,12 +663,24 @@ void Kognac::assignIdsToAllTerms(string inputdir, long & counter,
     std::vector<string> files = Utils::getFiles(inputdir);
     assert(files.size() == 1);
     LZ4Reader reader(files.front());
+
     long classId = -1;
+    long prevCounter = 0;
+
     while (!reader.isEof()) {
         Kognac_TextClassID el;
         el.readFrom(&reader);
+        if (el.classID != classId) {
+            BOOST_LOG_TRIVIAL(debug) << "ClassID: " << el.classID <<
+                                     " first count " << counter;
+            //Update an internal data structure
+            if (classId != -1) {
+                extractor.addClassesBeginEndRange(classId, prevCounter, counter);
+                prevCounter = counter;
+            }
+            classId = el.classID;
+        }
         assert(el.classID >= classId);
-        classId = el.classID;
         out << to_string(counter) << " " << to_string(el.size) << " ";
         out.write(el.term, el.size);
         out << endl;
@@ -742,7 +782,6 @@ void Kognac::pickSmallestClassIDPart(string inputFile, const bool useFP) {
                 lastEl.classID = minClass;
                 lastEl.classID2 = 0;
                 lastEl.writeTo(&writer);
-
                 memcpy(supportBuffer, el.term, el.size);
                 sSupportBuffer = el.size;
                 minClass = LONG_MAX;
@@ -765,6 +804,7 @@ void Kognac::pickSmallestClassIDPart(string inputFile, const bool useFP) {
         char supportBuffer[MAX_TERM_SIZE + 2];
         size_t sSupportBuffer = 0;
         long minClass = LONG_MAX;
+        const std::vector<long> *taxonomyClasses;
         bool first = true;
         while (!reader.isEof()) {
             Kognac_TextClassID el;
@@ -782,12 +822,13 @@ void Kognac::pickSmallestClassIDPart(string inputFile, const bool useFP) {
                 lastEl.classID = minClass;
                 lastEl.classID2 = 0;
                 lastEl.writeTo(&writer);
-
                 memcpy(supportBuffer, el.term, el.size);
                 sSupportBuffer = el.size;
                 minClass = el.classID;
-            } else if (el.classID < minClass) {
-                minClass = el.classID;
+            }
+            extractor.retrieveInstances(el.classID, &taxonomyClasses);
+            if (taxonomyClasses && taxonomyClasses->at(0) < minClass) {
+                minClass = taxonomyClasses->at(0);
             }
         }
 
@@ -943,17 +984,24 @@ void Kognac::assignIdsToMostPopularTerms(StringCollection & col,
     }
 }
 
-void Kognac::extractAllTermsWithClassIDs(const int nthreads, const bool useFP,
+void Kognac::extractAllTermsWithClassIDs(const int nthreads,
+        const int nReadingThreads,
+        const bool useFP,
         string outputdir,
         ByteArrayToNumberMap & frequentTermsMap,
         std::map<unsigned long, unsigned long> &frequencyClasses) {
-    assert(splittedInput.size() == nthreads);
+    assert(splittedInput.size() == nReadingThreads);
     long maxMem = std::max((long)(10 * 1024 * 1024),
                            (long)(Utils::getSystemMemory() * 0.7));
     maxMem = maxMem / nthreads;
 
     std::map<unsigned long, unsigned long> *localClasses =
         new std::map<unsigned long, unsigned long>[nthreads - 1];
+
+    DiskLZ4Reader **readers = new DiskLZ4Reader*[nReadingThreads];
+    for (int i = 0; i < nReadingThreads; ++i) {
+        readers[i] = new DiskLZ4Reader(splittedInput[i], nthreads / nReadingThreads, 3);
+    }
 
     boost::thread *threads = new boost::thread[nthreads - 1];
     for (int i = 1; i < nthreads; ++i) {
@@ -963,32 +1011,50 @@ void Kognac::extractAllTermsWithClassIDs(const int nthreads, const bool useFP,
             threads[i - 1] = boost::thread(
                                  boost::bind(
                                      &Kognac::extractAllTermsWithClassIDs_int,
-                                     this, maxMem, splittedInput[i], outputFile,
+                                     this, maxMem,
+                                     readers[i % nReadingThreads],
+                                     i / nReadingThreads,
+                                     outputFile,
                                      &frequentTermsMap,
                                      localClasses + i - 1, nthreads));
         } else {
             threads[i - 1] = boost::thread(
                                  boost::bind(
                                      &Kognac::extractAllTermsWithClassIDsNOFP_int,
-                                     this, maxMem, splittedInput[i], outputFile,
+                                     this, maxMem,
+                                     readers[i % nReadingThreads],
+                                     i / nReadingThreads,
+                                     outputFile,
                                      &frequentTermsMap,
                                      localClasses + i - 1, nthreads));
 
         }
     }
+
     string outputFile = outputdir + string("/") + to_string(0);
     if (useFP) {
-        extractAllTermsWithClassIDs_int(maxMem, splittedInput[0], outputFile,
+        extractAllTermsWithClassIDs_int(maxMem,
+                                        readers[0],
+                                        0,
+                                        outputFile,
                                         &frequentTermsMap, &frequencyClasses,
                                         nthreads);
     } else {
-        extractAllTermsWithClassIDsNOFP_int(maxMem, splittedInput[0], outputFile,
+        extractAllTermsWithClassIDsNOFP_int(maxMem,
+                                            readers[0],
+                                            0,
+                                            outputFile,
                                             &frequentTermsMap, &frequencyClasses,
                                             nthreads);
     }
     for (int i = 1; i < nthreads; ++i) {
         threads[i - 1].join();
     }
+
+    for (int i = 0; i < nReadingThreads; ++i) {
+        delete readers[i];
+    }
+    delete[] readers;
 
     if (useFP) {
         //Merge all frequencies
@@ -1004,24 +1070,18 @@ void Kognac::extractAllTermsWithClassIDs(const int nthreads, const bool useFP,
         }
     }
 
-#ifdef DEBUG
-    //for (auto &pair : classesHash) {
-    //    cout << pair.first << " " << frequencyClasses.find(pair.second)->second << endl;
-    //}
-#endif
-
     delete[] threads;
     delete[] localClasses;
 }
 
 void Kognac::extractAllTermsWithClassIDs_int(const long maxMem,
-        string inputfile,
+        DiskLZ4Reader * reader,
+        const int idReader,
         string outputfile,
         ByteArrayToNumberMap * frequentTermsMap,
         std::map<unsigned long, unsigned long> *frequencyClasses,
         const int nthreads) {
 
-    LZ4Reader reader(inputfile);
     char tmpS[MAX_TERM_SIZE + 2];
     char tmpP[MAX_TERM_SIZE + 2];
     char tmpO[MAX_TERM_SIZE + 2];
@@ -1029,26 +1089,26 @@ void Kognac::extractAllTermsWithClassIDs_int(const long maxMem,
     //Output: I create n outputs, depending on the hash of the terms
     Kognac_TermBufferWriter writer(maxMem, nthreads, outputfile, false);
 
-    while (!reader.isEof()) {
+    while (!reader->isEOF(idReader)) {
         //Read the three fields
         int sizeTerm;
-        if (reader.parseByte() != 0) {
+        if (reader->readByte(idReader) != 0) {
             BOOST_LOG_TRIVIAL(error) << "Flag should always be zero!";
             throw 10;
         }
-        const char *term = reader.parseString(sizeTerm);
+        const char *term = reader->readString(idReader, sizeTerm);
         memcpy(tmpS, term, sizeTerm);
-        if (reader.parseByte() != 0) {
+        if (reader->readByte(idReader) != 0) {
             BOOST_LOG_TRIVIAL(error) << "Flag should always be zero!";
             throw 10;
         }
-        term = reader.parseString(sizeTerm);
+        term = reader->readString(idReader, sizeTerm);
         memcpy(tmpP, term, sizeTerm);
-        if (reader.parseByte() != 0) {
+        if (reader->readByte(idReader) != 0) {
             BOOST_LOG_TRIVIAL(error) << "Flag should always be zero!";
             throw 10;
         }
-        term = reader.parseString(sizeTerm);
+        term = reader->readString(idReader, sizeTerm);
         memcpy(tmpO, term, sizeTerm);
 
 
@@ -1068,40 +1128,40 @@ void Kognac::extractAllTermsWithClassIDs_int(const long maxMem,
 }
 
 void Kognac::extractAllTermsWithClassIDsNOFP_int(const long maxMem,
-        string inputfile,
+        DiskLZ4Reader * reader,
+        int idReader,
         string outputfile,
         ByteArrayToNumberMap * frequentTermsMap,
         std::map<unsigned long, unsigned long> *frequencyClasses,
         const int nthreads) {
 
-    LZ4Reader reader(inputfile);
     char tmpS[MAX_TERM_SIZE + 2];
     char tmpP[MAX_TERM_SIZE + 2];
     char tmpO[MAX_TERM_SIZE + 2];
 
     //Output: I create n outputs, depending on the hash of the terms
-    Kognac_TermBufferWriter writer(maxMem, nthreads, outputfile, true);
+    Kognac_TermBufferWriter writer(maxMem, nthreads, outputfile, false);
 
-    while (!reader.isEof()) {
+    while (!reader->isEOF(idReader)) {
         //Read the three fields
         int sizeTerm;
-        if (reader.parseByte() != 0) {
+        if (reader->readByte(idReader) != 0) {
             BOOST_LOG_TRIVIAL(error) << "Flag should always be zero!";
             throw 10;
         }
-        const char *term = reader.parseString(sizeTerm);
+        const char *term = reader->readString(idReader, sizeTerm);
         memcpy(tmpS, term, sizeTerm);
-        if (reader.parseByte() != 0) {
+        if (reader->readByte(idReader) != 0) {
             BOOST_LOG_TRIVIAL(error) << "Flag should always be zero!";
             throw 10;
         }
-        term = reader.parseString(sizeTerm);
+        term = reader->readString(idReader, sizeTerm);
         memcpy(tmpP, term, sizeTerm);
-        if (reader.parseByte() != 0) {
+        if (reader->readByte(idReader) != 0) {
             BOOST_LOG_TRIVIAL(error) << "Flag should always be zero!";
             throw 10;
         }
-        term = reader.parseString(sizeTerm);
+        term = reader->readString(idReader, sizeTerm);
         memcpy(tmpO, term, sizeTerm);
 
 
@@ -1200,26 +1260,26 @@ void Kognac::processTerm(Kognac_TermBufferWriter & writer, const int pos,
     } else {
         //long hashTerm = Hashes::murmur3_56(term + 2, sizeTerm);
         /*** long minClass = LONG_MAX;
-        minClass = writer.getClassFromCache2(term + 2, sizeTerm);
+                                       minClass = writer.getClassFromCache2(term + 2, sizeTerm);
 
-        const std::vector<long> *taxonomyClasses = NULL;
-        extractor.retrieveInstances(classID, &taxonomyClasses);
-        if (taxonomyClasses) {
-            if (taxonomyClasses->at(0) < minClass) {
-                classID = taxonomyClasses->at(0);
-                //Add it in the cache
-                writer.insertInCache2(term + 2, sizeTerm, classID);
-            } else {
-                return;
-            }
-        } else {
-            if (minClass < LONG_MAX) {
-                //I already inserted it
-                return;
-            }
-            classID = LONG_MAX;
-            writer.insertInCache2(term + 2, sizeTerm, classID - 1);
-        }***/
+                                       const std::vector<long> *taxonomyClasses = NULL;
+                                       extractor.retrieveInstances(classID, &taxonomyClasses);
+                                       if (taxonomyClasses) {
+                                       if (taxonomyClasses->at(0) < minClass) {
+                                       classID = taxonomyClasses->at(0);
+        //Add it in the cache
+                                       writer.insertInCache2(term + 2, sizeTerm, classID);
+                                   } else {
+                                       return;
+                                   }
+                                   } else {
+                                       if (minClass < LONG_MAX) {
+        //I already inserted it
+                                       return;
+                                   }
+                                       classID = LONG_MAX;
+                                       writer.insertInCache2(term + 2, sizeTerm, classID - 1);
+                                   }***/
         pair.classID = classID;
         writer.write(pair);
     }
@@ -1229,6 +1289,7 @@ Kognac::~Kognac() {
     for (std::vector<string>::iterator itr = splittedInput.begin();
             itr != splittedInput.end(); ++itr) {
         fs::remove(*itr);
+        fs::remove(fs::path(*itr + ".idx"));
     }
 }
 
@@ -1307,7 +1368,6 @@ void Kognac_TermBufferWriter::dumpBuffer(const int partition) {
             prev = &(*itr);
             countWritten++;
         } else {
-            //BOOST_LOG_TRIVIAL(debug) << "Duplicated: " << string(prev->term, prev->size) << " " << string(itr->term, itr->size) << " " << prev->classID << " " << itr->classID;
         }
     }
 

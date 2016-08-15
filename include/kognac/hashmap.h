@@ -29,6 +29,7 @@
 
 #include <sparsehash/sparse_hash_map>
 #include <sparsehash/dense_hash_map>
+#include <sparsehash/dense_hash_set>
 #include <boost/log/trivial.hpp>
 #include <list>
 #include <string>
@@ -64,7 +65,9 @@ struct hashstr {
 
 typedef google::sparse_hash_map<const char *, long, hashstr, eqstr> CompressedByteArrayToNumberMap;
 typedef google::dense_hash_map<const char *, long, hashstr, eqstr> ByteArrayToNumberMap;
+typedef google::dense_hash_map<long, const char *> NumberToByteArrayMap;
 typedef google::dense_hash_map<string, long> GStringToNumberMap;
+typedef google::dense_hash_set<const char *, hashstr, eqstr> ByteArraySet;
 
 class LRUByteArraySet {
 private:

@@ -30,6 +30,13 @@
 #include <kognac/hashmap.h>
 #include <kognac/factory.h>
 
+#include <kognac/diskreader.h>
+#include <kognac/disklz4writer.h>
+#include <kognac/disklz4reader.h>
+#include <kognac/multidisklz4writer.h>
+#include <kognac/multidisklz4reader.h>
+#include <kognac/multimergedisklz4reader.h>
+
 #ifdef COUNTSKETCH
 #include <kognac/CountSketch.h>
 #endif
@@ -46,6 +53,8 @@
 #include <vector>
 #include <list>
 #include <set>
+#include <thread>
+#include <mutex>
 #include <assert.h>
 
 using namespace std;
@@ -59,7 +68,9 @@ using namespace std;
 
 class SchemaExtractor;
 struct ParamsExtractCommonTermProcedure {
-    string inputFile;
+    DiskLZ4Reader *reader;
+    int idReader;
+
     Hashtable **tables;
     GStringToNumberMap *map;
     int dictPartitions;
@@ -73,29 +84,45 @@ struct ParamsExtractCommonTermProcedure {
 };
 
 struct ParamsNewCompressProcedure {
-    string *permDirs;
     int nperms;
     int signaturePerms;
-    string prefixOutputFile;
     int part;
     int parallelProcesses;
-    int itrN;
-    string *inNames;
+    DiskLZ4Reader *reader;
+    int idReader;
     ByteArrayToNumberMap *commonMap;
-    CompressedByteArrayToNumberMap *map;
-    string *uncommonTermsFile;
+    DiskLZ4Reader *readerUncommonTerms;
+
+    MultiDiskLZ4Writer *writer;
+    int idxWriter;
 };
 
 struct ParamsUncompressTriples {
-    vector<FileInfo> files;
+    DiskReader *reader;
     Hashtable *table1;
     Hashtable *table2;
     Hashtable *table3;
-    string outFile;
+    DiskLZ4Writer *writer;
+    int idwriter;
     SchemaExtractor *extractor;
     long *distinctValues;
     std::vector<string> *resultsMGS;
     size_t sizeHeap;
+};
+
+struct ParamsSortPartition {
+    string prefixInputFiles;
+    MultiDiskLZ4Reader *reader;
+    MultiMergeDiskLZ4Reader *mergerReader;
+    MultiDiskLZ4Writer *dictWriter;
+    int idDictWriter;
+    //string dictfile;
+    DiskLZ4Writer *writer;
+    int idWriter;
+    string prefixIntFiles;
+    int part;
+    uint64_t *counter;
+    long maxMem;
 };
 
 struct TriplePair {
@@ -105,6 +132,11 @@ struct TriplePair {
     void readFrom(LZ4Reader *reader) {
         tripleIdAndPosition = reader->parseLong();
         term = reader->parseLong();
+    }
+
+    void readFrom(int idReader, DiskLZ4Reader *reader) {
+        tripleIdAndPosition = reader->readLong(idReader);
+        term = reader->readLong(idReader);
     }
 
     void writeTo(LZ4Writer *writer) {
@@ -118,6 +150,224 @@ struct TriplePair {
 
     static bool sLess(const TriplePair &t1, const TriplePair &t2) {
         return t1.tripleIdAndPosition < t2.tripleIdAndPosition;
+    }
+
+};
+
+struct SimplifiedAnnotatedTerm {
+    const char *term;
+    long tripleIdAndPosition;
+    //int prefixid;
+    const char *prefix;
+    int size;
+
+    SimplifiedAnnotatedTerm() {
+        prefix = NULL;
+        size = 0;
+    }
+
+    void readFrom(const int id, DiskLZ4Reader *reader) {
+        term = reader->readString(id, size);
+        tripleIdAndPosition = reader->readLong(id);
+    }
+
+    void readFrom(LZ4Reader *reader) {
+        term = reader->parseString(size);
+        tripleIdAndPosition = reader->parseLong();
+    }
+
+    void writeTo(LZ4Writer *writer) {
+        if (prefix != NULL) {
+            int lenprefix = Utils::decode_short(prefix);
+            long len = lenprefix + size;
+            writer->writeVLong(len);
+            writer->writeRawArray(prefix + 2, lenprefix);
+            writer->writeRawArray(term, size);
+            writer->writeLong(tripleIdAndPosition);
+        } else {
+            writer->writeString(term, size);
+            writer->writeLong(tripleIdAndPosition);
+        }
+    }
+
+    void writeTo(const int id,
+                 DiskLZ4Writer *writer) {
+        if (prefix != NULL) {
+            int lenprefix = Utils::decode_short(prefix);
+            long len = lenprefix + size;
+            writer->writeVLong(id, len);
+            writer->writeRawArray(id, prefix + 2, lenprefix);
+            writer->writeRawArray(id, term, size);
+            writer->writeLong(id, tripleIdAndPosition);
+        } else {
+            writer->writeString(id, term, size);
+            writer->writeLong(id, tripleIdAndPosition);
+        }
+    }
+
+    bool equals(const char *el, const int sizeel, const char *prevPrefix) {
+        if (prevPrefix == prefix && sizeel == size) {
+            return memcmp(el, term, size) == 0;
+        }
+        return false;
+    }
+
+    const char *getPrefix(int &sizeprefix) {
+        if (size > 10 && memcmp(term, "<http://", 8) == 0) {
+            const char *endprefix = (const char *) memchr(term + 8, '#', size - 8);
+            if (endprefix) {
+                sizeprefix = endprefix - term;
+                return term;
+            } else {
+                //Try to get subdomain structures
+                endprefix = (const char *) memchr(term + 8, '/', size - 8);
+                if (endprefix) {
+                    sizeprefix = endprefix - term;
+                    return term;
+                } else {
+                    sizeprefix = 0;
+                    return NULL;
+                }
+            }
+        } else {
+            sizeprefix = 0;
+            return NULL;
+        }
+    }
+
+    static bool sless(const SimplifiedAnnotatedTerm &i,
+                      const SimplifiedAnnotatedTerm &j) {
+        if (i.prefix == NULL) {
+            if (j.prefix == NULL) {
+                int ret = memcmp(i.term, j.term, min(i.size, j.size));
+                if (ret == 0) {
+                    return (i.size - j.size) < 0;
+                } else {
+                    return ret < 0;
+                }
+            } else {
+                //Get the size of the prefix of j
+                //assert(prefixMap != NULL);
+                //auto itr = prefixMap->find(j.prefixid);
+                //assert(itr != prefixMap->end());
+                const int lenprefix = Utils::decode_short(j.prefix);
+                const int minsize = min(i.size, lenprefix);
+                int ret = memcmp(i.term, j.prefix + 2, minsize);
+                if (ret != 0) {
+                    return ret < 0;
+                } else {
+                    //Check the difference
+                    ret = memcmp(i.term + minsize, j.term,
+                                 min(i.size - minsize, j.size));
+                    if (ret != 0) {
+                        return ret < 0;
+                    } else {
+                        return ((i.size - minsize) - j.size) < 0;
+                    }
+                }
+            }
+        } else {
+            if (j.prefix != NULL) {
+                if (i.prefix == j.prefix) {
+                    int ret = memcmp(i.term, j.term, min(i.size, j.size));
+                    if (ret == 0) {
+                        return (i.size - j.size) < 0;
+                    } else {
+                        return ret < 0;
+                    }
+                } else {
+                    //Compare the two prefixes
+                    const int len1 = Utils::decode_short(i.prefix);
+                    const int len2 = Utils::decode_short(j.prefix);
+                    int ret = memcmp(i.prefix + 2, j.prefix + 2,
+                                     min(len1, len2));
+                    if (ret == 0) {
+                        assert(len1 != len2);
+                        if (len1 < len2) {
+                            if (i.size > 0) {
+                                //Must compare the second prefix with the
+                                //remaining of the first part
+                                int s1 = i.size;
+                                int s2 = len2 - len1;
+                                int mins = min(s1, s2);
+                                ret = memcmp(i.term, j.prefix + 2 + len1, mins);
+                                if (ret == 0) {
+                                    if (s1 < s2) {
+                                        return true;
+                                    } else if (s1 == s2) {
+                                        return j.size > 0;
+                                    } else {
+                                        ret = memcmp(i.term + mins, j.term,
+                                                     min(i.size - mins, j.size));
+                                        if (ret == 0) {
+                                            return ((i.size - mins) - j.size) < 0;
+                                        } else {
+                                            return ret < 0;
+                                        }
+                                    }
+                                } else {
+                                    return ret < 0;
+                                }
+                            } else {
+                                return true;
+                            }
+                        } else {
+                            if (j.size > 0) {
+                                //Must compare the second prefix with the
+                                //remaining of the first part
+                                int s1 = len1 - len2;
+                                int s2 = j.size;
+                                int mins = min(s1, s2);
+                                ret = memcmp(i.prefix + 2 + len2, j.term, mins);
+                                if (ret == 0) {
+                                    if (s1 > s2) {
+                                        return false;
+                                    } else if (s1 == s2) {
+                                        return false;
+                                    } else {
+                                        ret = memcmp(i.term, j.term + mins,
+                                                     min(i.size, j.size - mins));
+                                        if (ret == 0) {
+                                            return (i.size - (j.size - mins)) < 0;
+                                        } else {
+                                            return ret < 0;
+                                        }
+                                    }
+                                } else {
+                                    return ret < 0;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
+                    } else {
+                        return ret < 0;
+                    }
+                }
+            } else {
+                //Get the size of the prefix of i
+                //assert(prefixMap != NULL);
+                const int lenprefix = Utils::decode_short(i.prefix);
+                const int minsize = min(lenprefix, j.size);
+                int ret = memcmp(i.prefix + 2, j.term, minsize);
+                if (ret != 0) {
+                    return ret < 0;
+                } else {
+                    //Check the difference
+                    ret = memcmp(i.term, j.term + minsize,
+                                 min(i.size, j.size - minsize));
+                    if (ret != 0) {
+                        return ret < 0;
+                    } else {
+                        return (i.size - (j.size - minsize)) < 0;
+                    }
+                }
+            }
+        }
+    }
+
+    bool greater(const SimplifiedAnnotatedTerm &t1) const {
+        return !sless(*this, t1);
     }
 
 };
@@ -163,6 +413,25 @@ struct AnnotatedTerm {
         }
     }
 
+    void readFrom(const int id, DiskLZ4Reader *reader) {
+        term = reader->readString(id, size);
+
+        char b = reader->readByte(id);
+        if (b >> 1 != 0) {
+            tripleIdAndPosition = reader->readLong(id);
+            if (b & 1) {
+                useHashes = true;
+                hashT1 = reader->readLong(id);
+                hashT2 = reader->readLong(id);
+            } else {
+                useHashes = false;
+            }
+        } else {
+            tripleIdAndPosition = -1;
+            useHashes = false;
+        }
+    }
+
     void readFrom(LZ4Reader *reader) {
         term = reader->parseString(size);
 
@@ -198,6 +467,24 @@ struct AnnotatedTerm {
                 writer->writeLong(tripleIdAndPosition);
             }
 
+        }
+    }
+
+    void writeTo(const int id, DiskLZ4Writer *writer) {
+        writer->writeString(id, term, size);
+
+        if (useHashes) {
+            writer->writeByte(id, 3);
+            writer->writeLong(id, tripleIdAndPosition);
+            writer->writeLong(id, hashT1);
+            writer->writeLong(id, hashT2);
+        } else {
+            if (tripleIdAndPosition == -1) {
+                writer->writeByte(id, 0);
+            } else {
+                writer->writeByte(id, 2);
+                writer->writeLong(id, tripleIdAndPosition);
+            }
         }
     }
 
@@ -255,6 +542,7 @@ private:
 
     void do_countmin_secondpass(const int dictPartitions,
                                 const int sampleArg,
+                                const int maxReadingThreads,
                                 const int parallelProcesses,
                                 bool copyHashes,
                                 const unsigned int sizeHashTable,
@@ -273,28 +561,37 @@ private:
         Hashtable **tables2,
         Hashtable **tables3);
 
+    static void concatenateFiles_seq(string prefix, int part);
+
+    static void concatenateFiles(string prefix,
+                                 int parallelProcesses,
+                                 int maxReadingThreads);
 
     static std::vector<string> getPartitionBoundaries(const string kbdir,
             const int partitions);
 
-    static void rangePartitionFiles(int nthreads, vector<string> *inputFiles,
-                                    std::vector<string> &outputFiles,
+    static void rangePartitionFiles(int readingThreads,
+                                    int nthreads,
+                                    string prefixInputFiles,
                                     const std::vector<string> &boundaries);
 
-    static void sortRangePartitionedTuples(const string inputPrefix,
+    static void sortRangePartitionedTuples(DiskLZ4Reader *reader,
+                                           int idxReader,
                                            const string outputFile,
                                            const std::vector<string> *boundaries);
 
-    static void sortPartitionsAndAssignCounters(std::vector<string> &inputFiles,
+    static void sortPartitionsAndAssignCounters(string prefixInputFile,
             string dictfile, string outputfile, int partitions,
-            long &counter, int parallelProcesses);
+            long &counter, int parallelProcesses, int maxReadingThreads);
 
-    static void sortPartition(std::vector<string> *inputFiles,
-                              string dictfile, string outputfile, int part,
-                              uint64_t *counter, long maxMem);
+    static void sortPartition(ParamsSortPartition params);
 
     static void assignCountersAndPartByTripleID(long startCounter,
-            string infile, string outfile, int parallelProcesses);
+            DiskLZ4Reader *reader, int idReader,
+            MultiDiskLZ4Writer **writers,
+            std::mutex *locks,
+            int parallelProcesses,
+            int maxReadingThreads);
 
     //static void sampleTuples(string input, std::vector<string> *output);
 
@@ -332,7 +629,9 @@ protected:
 
     void extractUncommonTerm(const char *term, const int sizeTerm,
                              ByteArrayToNumberMap * map,
-                             LZ4Writer **udictFile,
+                             const int idwriter,
+                             DiskLZ4Writer *writer,
+                             //LZ4Writer **udictFile,
                              const long tripleId,
                              const int pos,
                              const int dictPartitions,
@@ -349,18 +648,22 @@ protected:
 
     void extractCommonTerms(ParamsExtractCommonTermProcedure params);
 
-    void extractUncommonTerms(const int dictPartitions, string inputFile,
+    void extractUncommonTerms(const int dictPartitions, DiskLZ4Reader *inputFile,
+                              const int inputFileId,
                               const bool copyHashes, const int idProcess,
                               const int parallelProcesses,
-                              string * udictFileName,
+                              DiskLZ4Writer *writer,
+                              //string * udictFileName,
                               const bool splitUncommonByHash);
 
     void mergeCommonTermsMaps(ByteArrayToNumberMap * finalMap,
                               GStringToNumberMap * maps, int nmaps);
 
-    void mergeNotPopularEntries(vector<string> *inputFiles,
-                                string globalDictOutput, string outputFile1, string outputFile2,
-                                long * startCounter, int increment, int parallelProcesses);
+    void mergeNotPopularEntries(string prefixInputFile,
+                                string globalDictOutput, string outputFile2,
+                                long * startCounter, int increment,
+                                int parallelProcesses,
+                                int maxReadingThreads);
 
     void assignNumbersToCommonTermsMap(ByteArrayToNumberMap * finalMap,
                                        long * counters, LZ4Writer **writers,
@@ -371,41 +674,48 @@ protected:
 
     bool areFilesToCompress(int parallelProcesses, string * tmpFileNames);
 
-    static void sortAndDumpToFile(vector<AnnotatedTerm> &vector, string outputFile,
+    static void sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &vector,
+                                  string outputFile,
                                   bool removeDuplicates);
 
-    void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
+    static void sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &vector,
+                                  DiskLZ4Writer *writer,
+                                  const int id);
 
-    void compressTriples(const int parallelProcesses, const int ndicts,
-                         string * permDirs, int nperms, int signaturePerms, vector<string> &notSoUncommonFiles,
+    static void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
+
+    void compressTriples(const int maxReadingThreads,
+                         const int parallelProcesses,
+                         const int ndicts,
+                         string * permDirs,
+                         int nperms, int signaturePerms,
+                         vector<string> &notSoUncommonFiles,
                          vector<string> &finalUncommonFiles, string * tmpFileNames,
                          StringCollection * poolForMap, ByteArrayToNumberMap * finalMap);
 
-    void sortFilesByTripleSource(string kbPath, const int parallelProcesses, const int ndicts,
-                                 vector<string> uncommonFiles, vector<string> &finalUncommonFiles);
-
-    void sortByTripleID(vector<string> *inputFiles, string outputFile,
+    static void sortByTripleID(MultiDiskLZ4Reader *reader,
+                        //vector<string> *inputFiles,
+                        DiskLZ4Writer *writer,
+                        const int idWriter,
+                        string tmpfileprefix,
                         const long maxMemory);
 
-    void immemorysort(string **inputFiles, int parallelProcesses, string outputFile, int *noutputFiles,
-                      bool removeDuplicates,
-                      const long maxSizeToSort, bool sample);
+    static void immemorysort(string **inputFiles,
+                             int maxReadingThreads,
+                             int parallelProcesses,
+                             string outputFile,
+                             //int *noutputFiles,
+                             bool removeDuplicates,
+                             const long maxSizeToSort, bool sample);
 
-    void inmemorysort_seq(const string inputFile,
-                          int idx,
-                          const int incrIdx,
-                          const long maxMemPerThread,
-                          bool removeDuplicates,
-                          string outputFile,
-                          bool sample);
-
-    void sortDictionaryEntriesByText(string **input, const int ndicts,
-                                     const int parallelProcesses,
-                                     string * prefixOutputFiles,
-                                     int *noutputfiles,
-                                     ByteArrayToNumberMap * map,
-                                     bool filterDuplicates,
-                                     bool sample);
+    static void inmemorysort_seq(DiskLZ4Reader *reader,
+                                 DiskLZ4Writer *writer,
+                                 MultiDiskLZ4Writer *sampleWriter,
+                                 const int idReader,
+                                 int idx,
+                                 const long maxMemPerThread,
+                                 bool removeDuplicates,
+                                 bool sample);
 
     static unsigned long calculateSizeHashmapCompression();
 
@@ -436,7 +746,9 @@ public:
                bool onlySample);
 
     virtual void compress(string * permDirs, int nperms, int signaturePerms,
-                          string * dictionaries, int ndicts, int parallelProcesses);
+                          string * dictionaries, int ndicts,
+                          int parallelProcesses,
+                          int maxReadingThreads);
 
     string **dictFileNames;
     string **uncommonDictFileNames;
@@ -461,6 +773,26 @@ public:
     static std::vector<string> getAllDictFiles(string prefixDict);
 
     ~Compressor();
+
+    //I make it public only for testing purposes
+    static void sortDictionaryEntriesByText(string **input, const int ndicts,
+                                            const int maxReadingThreads,
+                                            const int parallelProcesses,
+                                            string * prefixOutputFiles,
+                                            //int *noutputfiles,
+                                            ByteArrayToNumberMap * map,
+                                            bool filterDuplicates,
+                                            bool sample);
+
+    static void sortFilesByTripleSource(string kbPath,
+                                        const int maxReadingThreads,
+                                        const int parallelProcesses,
+                                        const int ndicts,
+                                        vector<string> uncommonFiles,
+                                        vector<string> &finalUncommonFiles);
+
+
+
 };
 
 #endif /* COMPRESSOR_H_ */

@@ -192,7 +192,7 @@ private:
     const int maxPreallocatedSize;
     int preallocatedSize;
     TypeEl *preallocatedElements;
-    std::vector<std::unique_ptr<TypeEl[]>> prevPreallocatedEls;
+    std::vector<std::unique_ptr<TypeEl[]> > prevPreallocatedEls;
 
 public:
     PreallocatedStratArraysFactory(int arraySize, int maxSize, int preallocatedSize) :

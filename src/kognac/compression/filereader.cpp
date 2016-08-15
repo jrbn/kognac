@@ -37,9 +37,26 @@ namespace timens = boost::chrono;
 
 string GZIP_EXTENSION = string(".gz");
 
+FileReader::FileReader(char *buffer, size_t sizebuffer, bool gzipped) :
+    byteArray(true), rawByteArray(buffer),
+    sizeByteArray(sizebuffer), compressed(gzipped) {
+    if (compressed) {
+        //Decompress the stream
+        //timens::system_clock::time_point start = timens::system_clock::now();
+        io::filtering_ostream os;
+        os.push(io::gzip_decompressor());
+        os.push(io::back_inserter(uncompressedByteArray));
+        io::write(os, buffer, sizebuffer);
+        //boost::chrono::duration<double> sec = boost::chrono::system_clock::now()
+        //                                      - start;
+        //BOOST_LOG_TRIVIAL(debug) << "Time decompressing " << sizebuffer << " bytes is " << sec.count() * 1000 << "ms.";
+    }
+    currentIdx = 0;
+}
+
 FileReader::FileReader(FileInfo sFile) :
-    compressed(!sFile.splittable), rawFile(sFile.path,
-                                           ios_base::in | ios_base::binary) {
+    byteArray(false), compressed(!sFile.splittable), rawFile(sFile.path,
+            ios_base::in | ios_base::binary) {
     //First check the extension to identify what kind of file it is.
     fs::path p(sFile.path);
     if (p.has_extension() && p.extension() == GZIP_EXTENSION) {
@@ -69,24 +86,65 @@ FileReader::FileReader(FileInfo sFile) :
 
 bool FileReader::parseTriple() {
     bool ok = false;
-    if (compressed) {
-        ok = (bool) std::getline(compressedFile, currentLine);
+    if (byteArray) {
+        if (compressed) {
+            if (currentIdx < uncompressedByteArray.size()) {
+                size_t e = currentIdx + 1;
+                while (e < uncompressedByteArray.size()
+                        && uncompressedByteArray[e] != '\n') {
+                    e++;
+                }
+                if (e == currentIdx + 1 || uncompressedByteArray[currentIdx] == '#') {
+                    currentIdx = e + 1;
+                    return parseTriple();
+                }
+                tripleValid = parseLine(&uncompressedByteArray[currentIdx],
+                                        e - currentIdx);
+                currentIdx = e + 1;
+                return true;
+            } else {
+                tripleValid = false;
+                return false;
+            }
+        } else {
+            if (currentIdx < sizeByteArray) {
+                //read a line
+                size_t e = currentIdx + 1;
+                while (e < sizeByteArray && rawByteArray[e] != '\n') {
+                    e++;
+                }
+                if (e == currentIdx + 1 || rawByteArray[currentIdx] == '#') {
+                    currentIdx = e + 1;
+                    return parseTriple();
+                }
+                tripleValid = parseLine(rawByteArray + currentIdx, e - currentIdx);
+                currentIdx = e + 1;
+                return true;
+            } else {
+                tripleValid = false;
+                return false;
+            }
+        }
     } else {
-        ok = countBytes <= end && std::getline(rawFile, currentLine);
-        if (ok) {
-            countBytes = rawFile.tellg();
+        if (compressed) {
+            ok = (bool) std::getline(compressedFile, currentLine);
+        } else {
+            ok = countBytes <= end && std::getline(rawFile, currentLine);
+            if (ok) {
+                countBytes = rawFile.tellg();
+            }
         }
-    }
 
-    if (ok) {
-        if (currentLine.size() == 0 || currentLine.at(0) == '#') {
-            return parseTriple();
+        if (ok) {
+            if (currentLine.size() == 0 || currentLine.at(0) == '#') {
+                return parseTriple();
+            }
+            tripleValid = parseLine(currentLine.c_str(), (int)currentLine.size());
+            return true;
         }
-        tripleValid = parseLine(currentLine.c_str(), (int)currentLine.size());
-        return true;
+        tripleValid = false;
+        return false;
     }
-    tripleValid = false;
-    return false;
 }
 
 const char *FileReader::getCurrentS(int &length) {
@@ -117,11 +175,11 @@ void FileReader::checkRange(const char *pointer, const char* start,
 
 bool FileReader::parseLine(const char *line, const int sizeLine) {
 
+    const char* endLine = line + sizeLine;
+    const char *endS;
+    const char *endO = NULL;
     try {
-        const char* endLine = line + sizeLine;
-
         // Parse subject
-        const char *endS;
         startS = line;
         if (line[0] == '<') {
             endS = strchr(line, '>') + 1;
@@ -139,12 +197,15 @@ bool FileReader::parseLine(const char *line, const int sizeLine) {
 
         // Parse object
         startO = startP + lengthP + 1;
-        const char *endO = NULL;
         if (startO[0] == '<') { // URI
             endO = strchr(startO, '>') + 1;
         } else if (startO[0] == '"') { // Literal
             //Copy until the end of the string and remove character
-            endO = strrchr(startO, '.')  - 1;
+            endO = endLine;
+            while (*endO != '.' && endO >  startO) {
+                endO--;
+            }
+            endO--;
         } else { // Bnode
             endO = strchr(startO, ' ');
         }
@@ -156,7 +217,7 @@ bool FileReader::parseLine(const char *line, const int sizeLine) {
                 && lengthO < (MAX_TERM_SIZE - 1)) {
             return true;
         } else {
-            BOOST_LOG_TRIVIAL(error) << "The triple was not parsed correctly: " << lengthS << " " << lengthP << " " << lengthO;
+            //BOOST_LOG_TRIVIAL(error) << "The triple was not parsed correctly: " << lengthS << " " << lengthP << " " << lengthO;
             return false;
         }
 

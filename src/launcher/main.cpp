@@ -82,6 +82,7 @@ void initParams(int argc, const char** argv, po::variables_map &vm,
     ("maxThreads", po::value<int>()->default_value(8), "Sets the maximum number of threads to use during the compression. Default is '8'")
     ("maxConcThreads", po::value<int>()->default_value(2), "Sets the number of concurrent threads that reads the raw input. Default is '2'")
     ("output,o", po::value<string>(), "output. REQUIRED")
+    ("serializeTax", "Should I also serialize the content of the classes' taxonomy on a file?")
     ("compressGraph,c", "Should I also compress the graph. If set, I create a compressed version of the triples.")
     ("sampleArg1", po::value<int>(), "Argument for the method to identify the popular terms. If the method is sample, then it represents the top k elements to extract. If it is hash or mgcs, then it indicates the number o  popular terms. REQUIRED.")
     ("sampleMethod", po::value<std::string>()->default_value("cm"), "Method to use to identify the popular terms. Can be either 'sample', 'cm', 'mgcs', 'cm_mgcs'. Default is 'cm'")
@@ -121,6 +122,7 @@ int main(int argc, const char **argv) {
     const int maxPatternLength = vm["maxPatternLength"].as<int>();
     const int minSupport = vm["minSupport"].as<int>();
     const bool useFP = vm["fp"].as<bool>();
+    const bool serializeTaxonomy = !vm["serializeTax"].empty();
     int sampleMethod = PARSE_COUNTMIN;
     if (vm["sampleMethod"].as<string>() == string("sample")) {
         sampleMethod = PARSE_SAMPLE;
@@ -136,11 +138,12 @@ int main(int argc, const char **argv) {
     kognac.sample(sampleMethod, sampleArg, sampleArg2, parallelThreads,
                   maxConcurrentThreads);
     BOOST_LOG_TRIVIAL(info) << "Creating the dictionary mapping ...";
-    kognac.compress(parallelThreads, useFP, minSupport);
+    kognac.compress(parallelThreads, maxConcurrentThreads, useFP, minSupport,
+            serializeTaxonomy);
 
     if (compressGraph) {
         BOOST_LOG_TRIVIAL(info) << "Compressing the triples ...";
-        kognac.compressGraph(parallelThreads);
+        kognac.compressGraph(parallelThreads, maxConcurrentThreads);
     }
     BOOST_LOG_TRIVIAL(info) << "Done.";
 
