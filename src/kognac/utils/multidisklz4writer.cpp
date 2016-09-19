@@ -75,6 +75,9 @@ void MultiDiskLZ4Writer::run() {
             //BOOST_LOG_TRIVIAL(debug) << "Open file " << files[idFile];
             string path = files[idFile].filestowrite[currentfileidx];
             streams[idFile].open(path, ios_base::ate | ios_base::app);
+            if (!streams[idFile].good()) {
+                BOOST_LOG_TRIVIAL(error) << "Problems opening file " << idFile;
+            }
             openedstreams[idFile] = true;
             historyopenedfiles.push_back(idFile);
             nopenedstreams++;
@@ -87,8 +90,16 @@ void MultiDiskLZ4Writer::run() {
                 string path = files[idFile].filestowrite[currentfileidx];
                 streams[idFile].close();
                 streams[idFile].open(path, ios_base::ate | ios_base::app);
+                if (!streams[idFile].good()) {
+                    BOOST_LOG_TRIVIAL(error) << "Problems opening file " << idFile;
+                }
             }
+            //Write and check the writing was successful
             streams[idFile].write(it->buffer, it->sizebuffer);
+            if (!streams[idFile].good()) {
+                BOOST_LOG_TRIVIAL(error) << "Problems writing the file " << idFile;
+            }
+
             it++;
         }
         time_rawwriting += boost::chrono::system_clock::now() - start;
