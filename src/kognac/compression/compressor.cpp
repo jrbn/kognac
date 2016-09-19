@@ -2901,7 +2901,7 @@ void Compressor::sortByTripleID(//vector<string> *inputFiles,
     vector<TriplePair> pairs;
     long count = 0;
     while (!reader->isEOF(idWriter)) {
-        if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
+        if (sizeof(TriplePair) * pairs.size() * 2 >= maxMemory) {
             string file = tmpfileprefix + string(".") + to_string(idx++);
             sortAndDumpToFile2(pairs, file);
             filesToMerge.push_back(file);
@@ -3093,7 +3093,7 @@ void Compressor::sortFilesByTripleSource(string kbPath,
 
     boost::thread *threads = new boost::thread[parallelProcesses - 1];
     const long maxMem = max((long) MIN_MEM_SORT_TRIPLES,
-                            (long) (Utils::getSystemMemory() * 0.7) / parallelProcesses);
+                            (long) (Utils::getSystemMemory() * 0.9) / parallelProcesses);
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1] = boost::thread(
                              boost::bind(&Compressor::sortByTripleID,
