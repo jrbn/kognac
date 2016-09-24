@@ -684,7 +684,7 @@ protected:
 
     static void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
 
-    void compressTriples(const int maxReadingThreads,
+    static void compressTriples(const int maxReadingThreads,
                          const int parallelProcesses,
                          const int ndicts,
                          string * permDirs,
