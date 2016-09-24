@@ -3012,8 +3012,7 @@ void Compressor::compressTriples(const int maxReadingThreads,
             p.writer = writers[i % maxReadingThreads];
             p.idxWriter = (i / maxReadingThreads) * nperms;
             threads[i - 1] = boost::thread(
-                                 boost::bind(&Compressor::newCompressTriples,
-                                             this, p));
+                                 boost::bind(&Compressor::newCompressTriples, p));
         }
         p.idReader = 0;
         p.reader = readers[0];
@@ -3021,7 +3020,7 @@ void Compressor::compressTriples(const int maxReadingThreads,
         p.writer = writers[0];
         p.idxWriter = 0;
         p.readerUncommonTerms = uncommonReaders[0];
-        newCompressTriples(p);
+        Compressor::newCompressTriples(p);
         for (int i = 1; i < parallelProcesses; ++i) {
             threads[i - 1].join();
         }

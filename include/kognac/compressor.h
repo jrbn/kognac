@@ -670,9 +670,7 @@ protected:
                                        LZ4Writer **invWriters, int ndictionaries,
                                        bool preserveMapping);
 
-    void newCompressTriples(ParamsNewCompressProcedure params);
-
-    bool areFilesToCompress(int parallelProcesses, string * tmpFileNames);
+    static bool areFilesToCompress(int parallelProcesses, string * tmpFileNames);
 
     static void sortAndDumpToFile(vector<SimplifiedAnnotatedTerm> &vector,
                                   string outputFile,
@@ -683,15 +681,6 @@ protected:
                                   const int id);
 
     static void sortAndDumpToFile2(vector<TriplePair> &pairs, string outputFile);
-
-    void compressTriples(const int maxReadingThreads,
-                         const int parallelProcesses,
-                         const int ndicts,
-                         string * permDirs,
-                         int nperms, int signaturePerms,
-                         vector<string> &notSoUncommonFiles,
-                         vector<string> &finalUncommonFiles, string * tmpFileNames,
-                         StringCollection * poolForMap, ByteArrayToNumberMap * finalMap);
 
     static void sortByTripleID(MultiDiskLZ4Reader *reader,
                         //vector<string> *inputFiles,
@@ -791,8 +780,16 @@ public:
                                         vector<string> uncommonFiles,
                                         vector<string> &finalUncommonFiles);
 
+    static void compressTriples(const int maxReadingThreads,
+                         const int parallelProcesses,
+                         const int ndicts,
+                         string * permDirs,
+                         int nperms, int signaturePerms,
+                         vector<string> &notSoUncommonFiles,
+                         vector<string> &finalUncommonFiles, string * tmpFileNames,
+                         StringCollection * poolForMap, ByteArrayToNumberMap * finalMap);
 
-
+    static void newCompressTriples(ParamsNewCompressProcedure params);
 };
 
 #endif /* COMPRESSOR_H_ */
