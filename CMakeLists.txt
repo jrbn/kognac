@@ -6,7 +6,15 @@ include(externalproject)
 file(GLOB kognac_SRC
     "src/kognac/**/*.cpp"
 )
-add_executable(kognac src/launcher/main.cpp ${kognac_SRC})
+
+#Create both a library and the executable program
+add_library(kognac STATIC ${kognac_SRC})
+add_executable(kognac_exec src/launcher/main.cpp)
+
+#Set compiler options
+set(COMPILE_FLAGS "-c -DBOOST_LOG_DYN_LINK -fPIC -O3 -g -std=c++11 -Wall -Wno-sign-compare")
+set_target_properties(kognac PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
+set_target_properties(kognac_exec PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
 
 #LZ4
 find_library(lz4 lz4)
@@ -40,7 +48,4 @@ ENDIF()
 #standard include
 include_directories(include/)
 TARGET_LINK_LIBRARIES(kognac lz4 ${Boost_LIBRARIES})
-
-#Properties of the compiler
-set(COMPILE_FLAGS "-c -DBOOST_LOG_DYN_LINK -fPIC -O3 -g -std=c++11 -Wall -Wno-sign-compare")
-set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
+TARGET_LINK_LIBRARIES(kognac_exec kognac)
