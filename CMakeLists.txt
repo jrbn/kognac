@@ -1,4 +1,8 @@
 cmake_minimum_required (VERSION 2.8)
+
+set(CMAKE_CXX_COMPILER "g++")
+set(CMAKE_C_COMPILER "gcc")
+
 project (kognac)
 include(ExternalProject)
 
@@ -40,6 +44,15 @@ set(COMPILE_FLAGS "-c -DBOOST_LOG_DYN_LINK -fPIC -O3 -g -std=c++11 -Wall -Wno-si
 set_target_properties(kognac PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
 set_target_properties(kognac_exec PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
 
+#PTHREADS
+find_package(Threads REQUIRED)
+if (THREADS_HAVE_PTHREAD_ARG)
+    target_compile_options(PUBLIC kognac_exec "-pthread")
+endif()
+if (CMAKE_THREAD_LIBS_INIT)
+    target_link_libraries(kognac_exec "${CMAKE_THREAD_LIBS_INIT}")
+endif()
+    
 #SPARSEHASH
 find_path (sparsehash sparsehash/sparse_hash_map)
 IF (${sparsehash} STREQUAL "sparsehash-NOTFOUND")
