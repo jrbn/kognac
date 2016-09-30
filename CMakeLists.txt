@@ -40,6 +40,23 @@ set(COMPILE_FLAGS "-c -DBOOST_LOG_DYN_LINK -fPIC -O3 -g -std=c++11 -Wall -Wno-si
 set_target_properties(kognac PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
 set_target_properties(kognac_exec PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
 
+#SPARSEHASH
+find_path (sparsehash sparsehash/sparse_hash_map)
+IF (${sparsehash} STREQUAL "sparsehash-NOTFOUND")
+    message("Could not find sparsehash. I'm going to download it from the GIT repository ...")
+    ExternalProject_Add(git-sparsehash
+        DOWNLOAD_COMMAND git clone https://github.com/sparsehash/sparsehash.git
+        DOWNLOAD_DIR external
+        SOURCE_DIR external/sparsehash
+        CONFIGURE_COMMAND ./configure
+        BUILD_IN_SOURCE 1
+        BUILD_COMMAND make src/sparsehash/internal/sparseconfig.h
+        INSTALL_COMMAND ""
+    )
+    ExternalProject_Get_Property(git-sparsehash SOURCE_DIR)
+    include_directories(${SOURCE_DIR}/src/)
+ENDIF()
+
 #LZ4
 find_library(lz4 lz4)
 find_path (lz4h lz4.h)
