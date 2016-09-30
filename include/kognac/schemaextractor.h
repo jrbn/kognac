@@ -38,8 +38,8 @@
 using namespace std;
 
 typedef google::dense_hash_map<const char *, vector<long>, hashstr, eqstr> SchemaMap;
-typedef google::dense_hash_map<long, vector<long>*> NumericSchemaMap;
-typedef google::dense_hash_map<long, vector<long>> NumericNPSchemaMap;
+typedef google::dense_hash_map<long, vector<long> *> NumericSchemaMap;
+typedef google::dense_hash_map<long, vector<long> > NumericNPSchemaMap;
 typedef google::dense_hash_set<const char*, hashstr, eqstr> TextualSet;
 
 typedef google::dense_hash_map<long, long> DomainRangeMap;
@@ -110,7 +110,7 @@ protected:
     DomainRangeMap ranges;
 
     map<long, string> hashMappings;
-    map<long, std::pair<long, long>> classesRanges;
+    map<long, std::pair<long, long> > classesRanges;
 
     /*SetEstimation propertyCardinality;
     google::dense_hash_map<long, long> propertiesID;*/
@@ -136,7 +136,7 @@ public:
     void serialize(string file);
 
     void rearrangeWithPatterns(std::map<unsigned long, unsigned long> &classes,
-                               std::vector<FPattern<unsigned long>> &patterns);
+                               std::vector<FPattern<unsigned long> > &patterns);
 
     long getRankingProperty(const long property);
 

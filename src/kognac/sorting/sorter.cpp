@@ -37,6 +37,7 @@ void Sorter::sortUnsortedFiles(vector<string> &inputFiles, string dir,
     SortedTripleWriter writer(dir, prefixOutputFiles, fileSize);
     for (vector<string>::iterator itr = inputFiles.begin();
             itr != inputFiles.end(); ++itr) {
+	BOOST_LOG_TRIVIAL(debug) << "Started reading " << *itr;
         LZ4Reader reader(*itr);
         const bool quad = reader.parseByte() != 0;
         while (!reader.isEof()) {
@@ -110,6 +111,7 @@ void Sorter::mergeSort(string inputDir, int nThreads, bool initialSorting,
                        long fileSize, int filesPerMerge) {
     int filesInDir = 0;
     int iteration = 0;
+	BOOST_LOG_TRIVIAL(debug) << "nthreads=" << nThreads;
 
     /*** SORT THE ORIGINAL FILES IN BLOCKS OF N RECORDS ***/
     if (initialSorting) {

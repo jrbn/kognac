@@ -74,7 +74,7 @@ private:
 
     string inputfile;
     std::ofstream stream;
-    std::vector<std::vector<long>> startpositions;
+    std::vector<std::vector<long> > startpositions;
 
     int nterminated;
 

@@ -108,8 +108,8 @@ public:
         return (long) (double)pow(2, avg) / FLAJETCOS * 3;
     }
 
-    std::vector<std::pair<long, long>> getAllRankings() {
-        vector<std::pair<long, long>> pairs;
+    std::vector<std::pair<long, long> > getAllRankings() {
+        vector<std::pair<long, long> > pairs;
         for (google::dense_hash_map<long, ThreeLongs>::iterator itr = map.begin();
                 itr != map.end(); ++itr) {
             long estimate = estimateCardinality(itr->first);

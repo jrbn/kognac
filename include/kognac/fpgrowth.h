@@ -51,7 +51,7 @@ public:
 template<class Node, class NodeType>
 class FPNodeFactory {
 private:
-    std::vector<std::vector<Node>> buffers;
+    std::vector<std::vector<Node> > buffers;
     Node *availNode;
     Node *limit;
 
@@ -190,7 +190,7 @@ private:
     }
 
     typedef std::vector<std::pair<long, std::pair<NodeType,
-            FPNode*>>> SupportElements;
+            FPNode*> > > SupportElements;
     void find_with_suffix(PatternContainer<NodeType> &output,
                           const FPTree &tree,
                           long minSupport,
@@ -216,7 +216,7 @@ private:
 
                 if (newPattern.patternElements.size() < maxLen) {
                     //Get the prefix tree
-                    std::vector<std::vector<FPNode*>> prefixes =
+                    std::vector<std::vector<FPNode*> > prefixes =
                                                        tree.getPrefixTree(
                                                            newPattern.
                                                            patternElements.back());
@@ -233,8 +233,8 @@ private:
         }
     }
 
-    std::vector<std::vector<FPNode*>> getPrefixTree(NodeType &el) const {
-        std::vector<std::vector<FPNode*>> output;
+    std::vector<std::vector<FPNode*> > getPrefixTree(NodeType &el) const {
+        std::vector<std::vector<FPNode*> > output;
         //Get node
         assert(fptable.count(el));
         FPNode* node = fptable.find(el)->second;
@@ -255,7 +255,7 @@ private:
 
     static FPTree createConditionalTreeFromPrefixes(const NodeType &root,
             const std::vector <
-            std::vector<FPNode* >> &prefixes, long minSupport,
+            std::vector<FPNode* > > &prefixes, long minSupport,
             const NodeType &leaf) {
         FPTree tree(root);
 
@@ -276,9 +276,9 @@ private:
     }
 
     static bool lessAscOrder(const std::pair<long, std::pair<NodeType,
-                             FPNode*>> &el1,
+                             FPNode*> > &el1,
                              const std::pair<long, std::pair<NodeType,
-                             FPNode*>> &el2) {
+                             FPNode*> > &el2) {
         return el1.first > el2.first;
     }
 
