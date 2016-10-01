@@ -17,7 +17,7 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
-**/
+ **/
 
 #include <kognac/sorter.h>
 #include <kognac/filemerger.h>
@@ -33,11 +33,11 @@
 namespace fs = boost::filesystem;
 
 void Sorter::sortUnsortedFiles(vector<string> &inputFiles, string dir,
-                               string prefixOutputFiles, int fileSize) {
+        string prefixOutputFiles, int fileSize) {
     SortedTripleWriter writer(dir, prefixOutputFiles, fileSize);
     for (vector<string>::iterator itr = inputFiles.begin();
             itr != inputFiles.end(); ++itr) {
-	BOOST_LOG_TRIVIAL(debug) << "Started reading " << *itr;
+        BOOST_LOG_TRIVIAL(debug) << "Started reading " << *itr;
         LZ4Reader reader(*itr);
         const bool quad = reader.parseByte() != 0;
         while (!reader.isEof()) {
@@ -51,13 +51,13 @@ void Sorter::sortUnsortedFiles(vector<string> &inputFiles, string dir,
                 writer.write(t1, t2, t3);
             }
         }
-	BOOST_LOG_TRIVIAL(debug) << "Finished reading " << *itr;
+        BOOST_LOG_TRIVIAL(debug) << "Finished reading " << *itr;
         fs::remove(*itr);
     }
 }
 
 void Sorter::sort(vector<string> &inputFiles, int filesPerMerge,
-                  string prefixOutputFiles) {
+        string prefixOutputFiles) {
     int segment = 0;
     while (inputFiles.size() > 0) {
         //Take out the filesPerMerge lastFiles
@@ -70,7 +70,7 @@ void Sorter::sort(vector<string> &inputFiles, int filesPerMerge,
         //Sort them and write a new file
         FileMerger<Triple> merger(inputForSorting);
         string fileOutput = prefixOutputFiles + string("-")
-                            + to_string(segment);
+            + to_string(segment);
         LZ4Writer writer(fileOutput);
         while (!merger.isEmpty()) {
             Triple t = merger.get();
@@ -108,10 +108,10 @@ void Sorter::sortBufferAndWriteToFile(vector<Triple> &v, string fileOutput) {
 }
 
 void Sorter::mergeSort(string inputDir, int nThreads, bool initialSorting,
-                       long fileSize, int filesPerMerge) {
+        long fileSize, int filesPerMerge) {
     int filesInDir = 0;
     int iteration = 0;
-	BOOST_LOG_TRIVIAL(debug) << "nthreads=" << nThreads;
+    BOOST_LOG_TRIVIAL(debug) << "nthreads=" << nThreads;
 
     /*** SORT THE ORIGINAL FILES IN BLOCKS OF N RECORDS ***/
     if (initialSorting) {
@@ -128,10 +128,10 @@ void Sorter::mergeSort(string inputDir, int nThreads, bool initialSorting,
         boost::thread *threads = new boost::thread[nThreads - 1];
         for (int i = 1; i < nThreads; ++i) {
             string prefixOutputFile = string("/sorted-inputfile-")
-                                      + to_string(i);
+                + to_string(i);
             threads[i - 1] = boost::thread(
-                                 boost::bind(&Sorter::sortUnsortedFiles, splits[i], inputDir,
-                                             prefixOutputFile, fileSize));
+                    boost::bind(&Sorter::sortUnsortedFiles, splits[i], inputDir,
+                        prefixOutputFile, fileSize));
         }
         string prefixOutputFile = string("/sorted-inputfile-0");
         sortUnsortedFiles(splits[0], inputDir, prefixOutputFile, fileSize);
@@ -167,13 +167,13 @@ void Sorter::mergeSort(string inputDir, int nThreads, bool initialSorting,
         boost::thread *threads = new boost::thread[nThreads - 1];
         for (int i = 1; i < nThreads; ++i) {
             string prefixOutputFile = inputDir + string("/merged-file-")
-                                      + to_string(i) + string("-") + to_string(iteration);
+                + to_string(i) + string("-") + to_string(iteration);
             threads[i - 1] = boost::thread(
-                                 boost::bind(&Sorter::sort, splits[i], filesPerMerge,
-                                             prefixOutputFile));
+                    boost::bind(&Sorter::sort, splits[i], filesPerMerge,
+                        prefixOutputFile));
         }
         string prefixOutputFile = inputDir + string("/merged-file-0-")
-                                  + to_string(iteration);
+            + to_string(iteration);
         sort(splits[0], filesPerMerge, prefixOutputFile);
         for (int i = 1; i < nThreads; ++i) {
             threads[i - 1].join();
