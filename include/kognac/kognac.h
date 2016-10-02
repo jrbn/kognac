@@ -239,7 +239,7 @@ private:
     SchemaExtractor extractor;
 
     //Contains the frequent patterns that we will mine from the input
-    std::shared_ptr<FPTree<unsigned long>> frequentPatterns;
+    std::shared_ptr<FPTree<unsigned long> > frequentPatterns;
     std::map<unsigned long, unsigned long> classesWithFrequency;
     std::map<string, unsigned long> classesHash; //Used only for debugging
     std::map<unsigned long, string> classesHash2; //Used only for debugging
@@ -247,7 +247,7 @@ private:
     const int maxPatternLength;
 
     //The procedure sample populates this list with the most frequent terms
-    std::vector<std::pair<string, unsigned long>> mostFrequentTerms;
+    std::vector<std::pair<string, unsigned long> > mostFrequentTerms;
 
     //std::vector<std::pair<string, unsigned long>> getTermFrequencies(
     //            const std::set<string> &elements) const;
@@ -314,7 +314,7 @@ private:
 
     void addTransactionToFrequentPatterns(
         std::vector<std::pair<unsigned long,
-        unsigned long>> &classes);
+        unsigned long> > &classes);
 
     void compressGraph_seq(DiskLZ4Reader *reader,
                            int idReader, string outputUncompressed,

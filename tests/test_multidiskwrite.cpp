@@ -10,7 +10,7 @@
 
 using namespace std;
 
-void process(MultiDiskLZ4Writer *writer, int idxWriter) {
+void process(MultiDiskLZ4Writer *writer, int offset, int idxWriter) {
     for (int i = 0; i < 6; ++i) {
         writer->writeByte(idxWriter + i, 0);
     }
@@ -18,7 +18,7 @@ void process(MultiDiskLZ4Writer *writer, int idxWriter) {
     long ntriples = 1000000000;
     long count = 0;
     for(long i = 0; i < ntriples; ++i) {
-        if (i % 20000000 == 0)
+        if (i % 20000000 == 0 && i != 0)
             cout << "Processed " << i << endl;
         for(int j = 0; j < 6; ++j) {
             writer->writeLong(idxWriter + j, count++);
@@ -56,7 +56,7 @@ int main(int argc, const char** argv) {
     for(int i = 0; i < nthreads; ++i) {
         MultiDiskLZ4Writer *writer = writers[i % maxReadingThreads];
         int idxWriter = (i / maxReadingThreads) * nperms;
-        threads[i] = boost::thread(boost::bind(&process, writer, idxWriter));
+        threads[i] = boost::thread(boost::bind(&process, writer, i % maxReadingThreads, idxWriter));
     }
 
     for (int i = 0; i < nthreads; ++i) {

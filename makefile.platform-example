@@ -1,4 +1,0 @@
-CINCLUDES=-I/usr/local/include
-CLIBS=-L/usr/local/lib 
-
-CPLUS=g++

@@ -21,6 +21,8 @@
 
 #include <kognac/triple.h>
 #include <kognac/lz4io.h>
+#include <kognac/multidisklz4writer.h>
+#include <kognac/multidisklz4reader.h>
 
 void Triple::readFrom(LZ4Reader *reader) {
     s = reader->parseVLong();
@@ -29,9 +31,23 @@ void Triple::readFrom(LZ4Reader *reader) {
     count = reader->parseVLong();
 }
 
+void Triple::readFrom(int part, MultiDiskLZ4Reader *reader) {
+    s = reader->readVLong(part);
+    p = reader->readVLong(part);
+    o = reader->readVLong(part);
+    count = reader->readVLong(part);
+}
+
 void Triple::writeTo(LZ4Writer *writer) {
     writer->writeVLong(s);
     writer->writeVLong(p);
     writer->writeVLong(o);
     writer->writeVLong(count);
+}
+
+void Triple::writeTo(int part, MultiDiskLZ4Writer *writer) {
+    writer->writeVLong(part, s);
+    writer->writeVLong(part, p);
+    writer->writeVLong(part, o);
+    writer->writeVLong(part, count);
 }

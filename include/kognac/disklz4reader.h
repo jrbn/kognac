@@ -27,7 +27,7 @@ private:
     string inputfile;
     std::vector<FileInfo> files;
     ifstream reader;
-    std::vector<std::vector<long>> beginningBlocks;
+    std::vector<std::vector<long> > beginningBlocks;
     std::vector<long> readBlocks;
 
     //support buffers for strings
