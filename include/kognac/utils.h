@@ -177,7 +177,7 @@ public:
 
     static vector<string> getFilesWithPrefix(string dir, string prefix);
 
-    static vector<string> getFiles(string dir);
+    static vector<string> getFiles(string dir, bool ignoreExtension = false);
 
     static vector<string> getSubdirs(string dir);
 

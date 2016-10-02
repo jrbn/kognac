@@ -17,7 +17,7 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
-**/
+ **/
 
 #ifndef TRIPLE_H_
 #define TRIPLE_H_
@@ -27,6 +27,8 @@
 
 class LZ4Reader;
 class LZ4Writer;
+class MultiDiskLZ4Writer;
+class MultiDiskLZ4Reader;
 
 typedef struct Triple {
     long s, p, o, count;
@@ -70,7 +72,11 @@ typedef struct Triple {
 
     void readFrom(LZ4Reader *reader);
 
+    void readFrom(int part, MultiDiskLZ4Reader *reader);
+
     void writeTo(LZ4Writer *writer);
+
+    void writeTo(int part, MultiDiskLZ4Writer *writer);
 
     static bool sLess(const Triple &t1, const Triple &t2) {
         return t1.less(t2);
@@ -79,9 +85,9 @@ typedef struct Triple {
 } Triple;
 
 const Triple minv(std::numeric_limits<long>::min(),
-                  std::numeric_limits<long>::min(), std::numeric_limits<long>::min());
+        std::numeric_limits<long>::min(), std::numeric_limits<long>::min());
 const Triple maxv(std::numeric_limits<long>::max(),
-                  std::numeric_limits<long>::max(), std::numeric_limits<long>::max());
+        std::numeric_limits<long>::max(), std::numeric_limits<long>::max());
 
 struct cmp: std::less<Triple> {
     bool operator ()(const Triple& a, const Triple& b) const {
@@ -107,11 +113,11 @@ struct cmp: std::less<Triple> {
 };
 
 class TripleWriter {
-public:
-    virtual void write(const long t1, const long t2, const long t3) = 0;
-    virtual void write(const long t1, const long t2, const long t3, const long count) = 0;
-    virtual ~TripleWriter() {
-    }
+    public:
+        virtual void write(const long t1, const long t2, const long t3) = 0;
+        virtual void write(const long t1, const long t2, const long t3, const long count) = 0;
+        virtual ~TripleWriter() {
+        }
 };
 
 #endif /* TRIPLE_H_ */

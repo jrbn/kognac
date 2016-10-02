@@ -17,7 +17,7 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
-**/
+ **/
 
 #include <kognac/utils.h>
 
@@ -153,58 +153,58 @@ long Utils::decode_longFixedBytes(const char* buffer, const uint8_t nbytes) {
     uint8_t offset = 0;
     long n = 0;
     switch (nbytes) {
-    case 1:
-        n += buffer[offset] & 0xFF;
-        break;
-    case 2:
-        n += (buffer[offset++] & 0xFF) << 8;
-        n += buffer[offset] & 0xFF;
-        break;
-    case 3:
-        n += (buffer[offset++] & 0xFF) << 16;
-        n += (buffer[offset++] & 0xFF) << 8;
-        n += buffer[offset] & 0xFF;
-        break;
-    case 4:
-        n += (long) (buffer[offset++] & 0xFF) << 24;
-        n += (buffer[offset++] & 0xFF) << 16;
-        n += (buffer[offset++] & 0xFF) << 8;
-        n += buffer[offset] & 0xFF;
-        break;
-    case 5:
-        n += (long) (buffer[offset++] & 0xFF) << 32;
-        n += (long) (buffer[offset++] & 0xFF) << 24;
-        n += (buffer[offset++] & 0xFF) << 16;
-        n += (buffer[offset++] & 0xFF) << 8;
-        n += buffer[offset] & 0xFF;
-        break;
-    case 6:
-        n += (long) (buffer[offset++] & 0xFF) << 40;
-        n += (long) (buffer[offset++] & 0xFF) << 32;
-        n += (long) (buffer[offset++] & 0xFF) << 24;
-        n += (buffer[offset++] & 0xFF) << 16;
-        n += (buffer[offset++] & 0xFF) << 8;
-        n += buffer[offset] & 0xFF;
-        break;
-    case 7:
-        n += (long) (buffer[offset++] & 0xFF) << 48;
-        n += (long) (buffer[offset++] & 0xFF) << 40;
-        n += (long) (buffer[offset++] & 0xFF) << 32;
-        n += (long) (buffer[offset++] & 0xFF) << 24;
-        n += (buffer[offset++] & 0xFF) << 16;
-        n += (buffer[offset++] & 0xFF) << 8;
-        n += buffer[offset] & 0xFF;
-        break;
-    case 8:
-        n += (long) (buffer[offset++]) << 56;
-        n += (long) (buffer[offset++] & 0xFF) << 48;
-        n += (long) (buffer[offset++] & 0xFF) << 40;
-        n += (long) (buffer[offset++] & 0xFF) << 32;
-        n += (long) (buffer[offset++] & 0xFF) << 24;
-        n += (buffer[offset++] & 0xFF) << 16;
-        n += (buffer[offset++] & 0xFF) << 8;
-        n += buffer[offset] & 0xFF;
-        break;
+        case 1:
+            n += buffer[offset] & 0xFF;
+            break;
+        case 2:
+            n += (buffer[offset++] & 0xFF) << 8;
+            n += buffer[offset] & 0xFF;
+            break;
+        case 3:
+            n += (buffer[offset++] & 0xFF) << 16;
+            n += (buffer[offset++] & 0xFF) << 8;
+            n += buffer[offset] & 0xFF;
+            break;
+        case 4:
+            n += (long) (buffer[offset++] & 0xFF) << 24;
+            n += (buffer[offset++] & 0xFF) << 16;
+            n += (buffer[offset++] & 0xFF) << 8;
+            n += buffer[offset] & 0xFF;
+            break;
+        case 5:
+            n += (long) (buffer[offset++] & 0xFF) << 32;
+            n += (long) (buffer[offset++] & 0xFF) << 24;
+            n += (buffer[offset++] & 0xFF) << 16;
+            n += (buffer[offset++] & 0xFF) << 8;
+            n += buffer[offset] & 0xFF;
+            break;
+        case 6:
+            n += (long) (buffer[offset++] & 0xFF) << 40;
+            n += (long) (buffer[offset++] & 0xFF) << 32;
+            n += (long) (buffer[offset++] & 0xFF) << 24;
+            n += (buffer[offset++] & 0xFF) << 16;
+            n += (buffer[offset++] & 0xFF) << 8;
+            n += buffer[offset] & 0xFF;
+            break;
+        case 7:
+            n += (long) (buffer[offset++] & 0xFF) << 48;
+            n += (long) (buffer[offset++] & 0xFF) << 40;
+            n += (long) (buffer[offset++] & 0xFF) << 32;
+            n += (long) (buffer[offset++] & 0xFF) << 24;
+            n += (buffer[offset++] & 0xFF) << 16;
+            n += (buffer[offset++] & 0xFF) << 8;
+            n += buffer[offset] & 0xFF;
+            break;
+        case 8:
+            n += (long) (buffer[offset++]) << 56;
+            n += (long) (buffer[offset++] & 0xFF) << 48;
+            n += (long) (buffer[offset++] & 0xFF) << 40;
+            n += (long) (buffer[offset++] & 0xFF) << 32;
+            n += (long) (buffer[offset++] & 0xFF) << 24;
+            n += (buffer[offset++] & 0xFF) << 16;
+            n += (buffer[offset++] & 0xFF) << 8;
+            n += buffer[offset] & 0xFF;
+            break;
     }
     return n;
 }
@@ -244,63 +244,63 @@ void Utils::encode_long(char* buffer, long n) {
 }
 
 void Utils::encode_longNBytes(char* buffer, const uint8_t nbytes,
-                              const uint64_t n) {
+        const uint64_t n) {
     uint8_t offset = 0;
     switch (nbytes) {
-    case 1:
-        buffer[offset] = n & 0xFF;
-        break;
-    case 2:
-        buffer[offset++] = (n >> 8) & 0xFF;
-        buffer[offset++] = n & 0xFF;
-        break;
-    case 3:
-        buffer[offset++] = (n >> 16) & 0xFF;
-        buffer[offset++] = (n >> 8) & 0xFF;
-        buffer[offset++] = n & 0xFF;
-        break;
-    case 4:
-        buffer[offset++] = (n >> 24) & 0xFF;
-        buffer[offset++] = (n >> 16) & 0xFF;
-        buffer[offset++] = (n >> 8) & 0xFF;
-        buffer[offset++] = n & 0xFF;
-        break;
-    case 5:
-        buffer[offset++] = (n >> 32) & 0xFF;
-        buffer[offset++] = (n >> 24) & 0xFF;
-        buffer[offset++] = (n >> 16) & 0xFF;
-        buffer[offset++] = (n >> 8) & 0xFF;
-        buffer[offset++] = n & 0xFF;
-        break;
-    case 6:
-        buffer[offset++] = (n >> 40) & 0xFF;
-        buffer[offset++] = (n >> 32) & 0xFF;
-        buffer[offset++] = (n >> 24) & 0xFF;
-        buffer[offset++] = (n >> 16) & 0xFF;
-        buffer[offset++] = (n >> 8) & 0xFF;
-        buffer[offset++] = n & 0xFF;
-        break;
-    case 7:
-        buffer[offset++] = (n >> 48) & 0xFF;
-        buffer[offset++] = (n >> 40) & 0xFF;
-        buffer[offset++] = (n >> 32) & 0xFF;
-        buffer[offset++] = (n >> 24) & 0xFF;
-        buffer[offset++] = (n >> 16) & 0xFF;
-        buffer[offset++] = (n >> 8) & 0xFF;
-        buffer[offset++] = n & 0xFF;
-        break;
-    case 8:
-        buffer[offset++] = (n >> 56) & 0xFF;
-        buffer[offset++] = (n >> 48) & 0xFF;
-        buffer[offset++] = (n >> 40) & 0xFF;
-        buffer[offset++] = (n >> 32) & 0xFF;
-        buffer[offset++] = (n >> 24) & 0xFF;
-        buffer[offset++] = (n >> 16) & 0xFF;
-        buffer[offset++] = (n >> 8) & 0xFF;
-        buffer[offset++] = n & 0xFF;
-        break;
-    default:
-        throw 10;
+        case 1:
+            buffer[offset] = n & 0xFF;
+            break;
+        case 2:
+            buffer[offset++] = (n >> 8) & 0xFF;
+            buffer[offset++] = n & 0xFF;
+            break;
+        case 3:
+            buffer[offset++] = (n >> 16) & 0xFF;
+            buffer[offset++] = (n >> 8) & 0xFF;
+            buffer[offset++] = n & 0xFF;
+            break;
+        case 4:
+            buffer[offset++] = (n >> 24) & 0xFF;
+            buffer[offset++] = (n >> 16) & 0xFF;
+            buffer[offset++] = (n >> 8) & 0xFF;
+            buffer[offset++] = n & 0xFF;
+            break;
+        case 5:
+            buffer[offset++] = (n >> 32) & 0xFF;
+            buffer[offset++] = (n >> 24) & 0xFF;
+            buffer[offset++] = (n >> 16) & 0xFF;
+            buffer[offset++] = (n >> 8) & 0xFF;
+            buffer[offset++] = n & 0xFF;
+            break;
+        case 6:
+            buffer[offset++] = (n >> 40) & 0xFF;
+            buffer[offset++] = (n >> 32) & 0xFF;
+            buffer[offset++] = (n >> 24) & 0xFF;
+            buffer[offset++] = (n >> 16) & 0xFF;
+            buffer[offset++] = (n >> 8) & 0xFF;
+            buffer[offset++] = n & 0xFF;
+            break;
+        case 7:
+            buffer[offset++] = (n >> 48) & 0xFF;
+            buffer[offset++] = (n >> 40) & 0xFF;
+            buffer[offset++] = (n >> 32) & 0xFF;
+            buffer[offset++] = (n >> 24) & 0xFF;
+            buffer[offset++] = (n >> 16) & 0xFF;
+            buffer[offset++] = (n >> 8) & 0xFF;
+            buffer[offset++] = n & 0xFF;
+            break;
+        case 8:
+            buffer[offset++] = (n >> 56) & 0xFF;
+            buffer[offset++] = (n >> 48) & 0xFF;
+            buffer[offset++] = (n >> 40) & 0xFF;
+            buffer[offset++] = (n >> 32) & 0xFF;
+            buffer[offset++] = (n >> 24) & 0xFF;
+            buffer[offset++] = (n >> 16) & 0xFF;
+            buffer[offset++] = (n >> 8) & 0xFF;
+            buffer[offset++] = n & 0xFF;
+            break;
+        default:
+            throw 10;
     }
 }
 
@@ -379,48 +379,48 @@ long Utils::decode_vlong(char* buffer, int *offset) {
     long retval = (first & 31);
 
     switch (nbytes) {
-    case 2:
-        retval += (buffer[pos++] & 255) << 5;
-        break;
-    case 3:
-        retval += (buffer[pos++] & 255) << 5;
-        retval += (buffer[pos++] & 255) << 13;
-        break;
-    case 4:
-        retval += (buffer[pos++] & 255) << 5;
-        retval += (buffer[pos++] & 255) << 13;
-        retval += (buffer[pos++] & 255) << 21;
-        break;
-    case 5:
-        retval += (buffer[pos++] & 255) << 5;
-        retval += (buffer[pos++] & 255) << 13;
-        retval += (buffer[pos++] & 255) << 21;
-        retval += (long) (buffer[pos++] & 255) << 29;
-        break;
-    case 6:
-        retval += (buffer[pos++] & 255) << 5;
-        retval += (buffer[pos++] & 255) << 13;
-        retval += (buffer[pos++] & 255) << 21;
-        retval += (long) (buffer[pos++] & 255) << 29;
-        retval += (long) (buffer[pos++] & 255) << 37;
-        break;
-    case 7:
-        retval += (buffer[pos++] & 255) << 5;
-        retval += (buffer[pos++] & 255) << 13;
-        retval += (buffer[pos++] & 255) << 21;
-        retval += (long) (buffer[pos++] & 255) << 29;
-        retval += (long) (buffer[pos++] & 255) << 37;
-        retval += (long) (buffer[pos++] & 255) << 45;
-        break;
-    case 8:
-        retval += (buffer[pos++] & 255) << 5;
-        retval += (buffer[pos++] & 255) << 13;
-        retval += (buffer[pos++] & 255) << 21;
-        retval += (long) (buffer[pos++] & 255) << 29;
-        retval += (long) (buffer[pos++] & 255) << 37;
-        retval += (long) (buffer[pos++] & 255) << 45;
-        retval += (long) (buffer[pos++] & 255) << 53;
-        break;
+        case 2:
+            retval += (buffer[pos++] & 255) << 5;
+            break;
+        case 3:
+            retval += (buffer[pos++] & 255) << 5;
+            retval += (buffer[pos++] & 255) << 13;
+            break;
+        case 4:
+            retval += (buffer[pos++] & 255) << 5;
+            retval += (buffer[pos++] & 255) << 13;
+            retval += (buffer[pos++] & 255) << 21;
+            break;
+        case 5:
+            retval += (buffer[pos++] & 255) << 5;
+            retval += (buffer[pos++] & 255) << 13;
+            retval += (buffer[pos++] & 255) << 21;
+            retval += (long) (buffer[pos++] & 255) << 29;
+            break;
+        case 6:
+            retval += (buffer[pos++] & 255) << 5;
+            retval += (buffer[pos++] & 255) << 13;
+            retval += (buffer[pos++] & 255) << 21;
+            retval += (long) (buffer[pos++] & 255) << 29;
+            retval += (long) (buffer[pos++] & 255) << 37;
+            break;
+        case 7:
+            retval += (buffer[pos++] & 255) << 5;
+            retval += (buffer[pos++] & 255) << 13;
+            retval += (buffer[pos++] & 255) << 21;
+            retval += (long) (buffer[pos++] & 255) << 29;
+            retval += (long) (buffer[pos++] & 255) << 37;
+            retval += (long) (buffer[pos++] & 255) << 45;
+            break;
+        case 8:
+            retval += (buffer[pos++] & 255) << 5;
+            retval += (buffer[pos++] & 255) << 13;
+            retval += (buffer[pos++] & 255) << 21;
+            retval += (long) (buffer[pos++] & 255) << 29;
+            retval += (long) (buffer[pos++] & 255) << 37;
+            retval += (long) (buffer[pos++] & 255) << 45;
+            retval += (long) (buffer[pos++] & 255) << 53;
+            break;
     }
     *offset = pos;
     return retval;
@@ -652,7 +652,7 @@ int Utils::commonPrefix(tTerm *o1, int s1, int e1, tTerm *o2, int s2, int e2) {
 }
 
 int Utils::compare(const char* o1, int s1, int e1, const char* o2, int s2,
-                   int e2) {
+        int e2) {
     for (int i = s1, j = s2; i < e1 && j < e2; i++, j++) {
         if (o1[i] != o2[j]) {
             return ((int)o1[i] & 0xff) - ((int) o2[j] & 0xff);
@@ -729,7 +729,7 @@ long Utils::getUsedMemory() {
     struct mach_task_basic_info info;
     mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
     if (task_info( mach_task_self( ), MACH_TASK_BASIC_INFO, (task_info_t) &info,
-                   &infoCount) != KERN_SUCCESS)
+                &infoCount) != KERN_SUCCESS)
         return (size_t) 0L; /* Can't access? */
     return (size_t) info.resident_size;
 
@@ -810,13 +810,29 @@ vector<string> Utils::getFilesWithPrefix(string dir, string prefix) {
     return files;
 }
 
-vector<string> Utils::getFiles(string dir) {
+vector<string> Utils::getFiles(string dir, bool ignoreExtension) {
     vector<string> files;
-    for (fs::directory_iterator itr(dir); itr != fs::directory_iterator();
-            ++itr) {
-        if (fs::is_regular_file(itr->status())
-                && itr->path().filename().string()[0] != '.') {
-            string s = itr->path().string();
+    if (!ignoreExtension) {
+        for (fs::directory_iterator itr(dir); itr != fs::directory_iterator();
+                ++itr) {
+            if (fs::is_regular_file(itr->status())
+                    && itr->path().filename().string()[0] != '.') {
+                string s = itr->path().string();
+                files.push_back(s);
+            }
+        }
+    } else {
+        std::set<string> s_files;
+        for (fs::directory_iterator itr(dir); itr != fs::directory_iterator();
+                ++itr) {
+            if (fs::is_regular_file(itr->status())
+                    && itr->path().filename().string()[0] != '.') {
+                string s = itr->path().string();
+                //Remove the extension
+                s_files.insert(itr->path().parent_path().string() + "/" + itr->path().stem().string());
+            }
+        }
+        for (auto s : s_files) {
             files.push_back(s);
         }
     }
@@ -843,18 +859,18 @@ int Utils::getNumberPhysicalCores() {
 long Utils::quickSelect(long *vector, int size, int k) {
     std::vector<long> supportVector(vector, vector + size);
     std::nth_element(supportVector.begin(), supportVector.begin() + k,
-                     supportVector.end());
+            supportVector.end());
     return supportVector[k];
     //  if (start == end)
-//          return vector[start];
-//      int j = partition(vector, start, end);
-//      int length = j - start + 1;
-//      if (length == k)
-//          return vector[j];
-//      else if (k < length)
-//          return quickSelect(vector, start, j - 1, k);
-//      else
-//          return quickSelect(vector, j + 1, end, k - length);
+    //          return vector[start];
+    //      int j = partition(vector, start, end);
+    //      int length = j - start + 1;
+    //      if (length == k)
+    //          return vector[j];
+    //      else if (k < length)
+    //          return quickSelect(vector, start, j - 1, k);
+    //      else
+    //          return quickSelect(vector, j + 1, end, k - length);
 }
 
 long Utils::getNBytes(std::string input) {
