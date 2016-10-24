@@ -6,6 +6,15 @@ set(CMAKE_C_COMPILER "gcc")
 project (kognac)
 include(ExternalProject)
 
+#Set to release mode if nothing is specified
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "Setting build type to 'Release' as none was specified.")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+    # Set the possible values of build type for cmake-gui
+      set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
+
 #Add macPorts
 # Detect if the "port" command is valid on this system; if so, return full path
 EXECUTE_PROCESS(COMMAND which port RESULT_VARIABLE DETECT_MACPORTS OUTPUT_VARIABLE MACPORTS_PREFIX ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -40,7 +49,10 @@ add_library(kognac STATIC ${kognac_SRC})
 add_executable(kognac_exec src/launcher/main.cpp)
 
 #Set compiler options
-set(COMPILE_FLAGS "-c -DBOOST_LOG_DYN_LINK -fPIC -O3 -g -std=c++11 -Wall -Wno-sign-compare")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -c -DBOOST_LOG_DYN_LINK -fPIC -std=c++11 -Wall -Wno-sign-compare")
+set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG -O3")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
+set(COMPILE_FLAGS "-c -DBOOST_LOG_DYN_LINK -fPIC -std=c++11 -Wall -Wno-sign-compare")
 set_target_properties(kognac PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
 set_target_properties(kognac_exec PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS}")
 

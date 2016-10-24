@@ -23,6 +23,8 @@ DiskLZ4Reader::DiskLZ4Reader(int npartitions, int nbuffersPerFile) {
     }
 
     compressedbuffers = new std::list<BlockToRead>[files.size()];
+    sCompressedbuffers.resize(files.size());
+
     m_files = new std::mutex[files.size()];
     cond_files = new std::condition_variable[files.size()];
     time_files = new boost::chrono::duration<double>[files.size()];
@@ -49,6 +51,8 @@ DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerF
         this->files.push_back(inf);
     }
     compressedbuffers = new std::list<BlockToRead>[files.size()];
+    sCompressedbuffers.resize(files.size());
+
     m_files = new std::mutex[files.size()];
     cond_files = new std::condition_variable[files.size()];
     time_files = new boost::chrono::duration<double>[files.size()];
@@ -162,6 +166,8 @@ void DiskLZ4Reader::run() {
         b.sizebuffer = sizeToBeRead;
         b.pivot = 0;
         compressedbuffers[currentFileIdx].push_back(b);
+        sCompressedbuffers[currentFileIdx]++;
+
         readBlocks[currentFileIdx]++;
         lk2.unlock();
         cond_files[currentFileIdx].notify_one();
@@ -189,6 +195,7 @@ bool DiskLZ4Reader::getNewCompressedBuffer(std::unique_lock<std::mutex> &lk,
     if (!compressedbuffers[id].empty()) {
         BlockToRead b = compressedbuffers[id].front();
         compressedbuffers[id].pop_front();
+        sCompressedbuffers[id]--;
 
         boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
         std::unique_lock<std::mutex> lk2(m_diskbufferpool);

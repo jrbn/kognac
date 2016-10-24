@@ -53,6 +53,8 @@ protected:
 
     //Pool of compressed buffers
     std::list<BlockToRead> *compressedbuffers;
+    std::vector<long> sCompressedbuffers; //number of elements in each list
+
     //Larger buffers to read from disk. They are proportional to SIZE_SEG
     std::vector<char*> diskbufferpool;
     std::condition_variable cond_diskbufferpool;

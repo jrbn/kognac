@@ -78,8 +78,28 @@ typedef struct Triple {
 
     void writeTo(int part, MultiDiskLZ4Writer *writer);
 
+    void toTriple(Triple &t) {
+        t.s = s;
+        t.p = p;
+        t.o = o;
+        t.count = count;
+    }
+
     static bool sLess(const Triple &t1, const Triple &t2) {
         return t1.less(t2);
+    }
+
+    static Triple max() {
+        Triple t;
+        t.s = ~0l;
+        t.p = ~0l;
+        t.o = ~0l;
+        t.count = ~0l;
+        return t;
+    }
+
+    static bool ismax(const Triple &t) {
+        return t.s == ~0l;
     }
 
 } Triple;
