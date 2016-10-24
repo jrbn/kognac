@@ -32,6 +32,7 @@ private:
     int nopenedstreams;
 
     const int maxopenedstreams;
+    const int nbuffersPerPartition;
     std::list<int> historyopenedfiles;
 
 protected:

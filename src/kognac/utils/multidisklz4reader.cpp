@@ -5,13 +5,15 @@
 namespace fs = boost::filesystem;
 
 MultiDiskLZ4Reader::MultiDiskLZ4Reader(int maxNPartitions,
-                                       int nbuffersPerPartition,
-                                       int maxopenedstreams) :
+        int nbuffersPerPartition,
+        int maxopenedstreams) :
     DiskLZ4Reader(maxNPartitions, nbuffersPerPartition),
-    maxopenedstreams(maxopenedstreams), partitions(maxNPartitions) {
-    nopenedstreams = 0;
-    nsets = 0;
-}
+    maxopenedstreams(maxopenedstreams),
+    nbuffersPerPartition(nbuffersPerPartition),
+    partitions(maxNPartitions) {
+        nopenedstreams = 0;
+        nsets = 0;
+    }
 
 void MultiDiskLZ4Reader::start() {
     currentthread = thread(std::bind(&MultiDiskLZ4Reader::run, this));
@@ -36,7 +38,7 @@ bool MultiDiskLZ4Reader::areNewBuffers(const int id) {
 }
 
 void MultiDiskLZ4Reader::readbuffer(int partitionToRead,
-                                    char *buffer) {
+        char *buffer) {
     //Read the file and put the content in the disk buffer
     boost::chrono::system_clock::time_point start = boost::chrono::system_clock::now();
     PartInfo &part = partitions[partitionToRead];
@@ -123,9 +125,15 @@ void MultiDiskLZ4Reader::run() {
         //Check whether I can get a buffer from the current file. Otherwise
         //keep looking
         int skipped = 0;
-        while (skipped < partitions.size() && readAll(partitionToRead)) {
-            partitionToRead = (partitionToRead + 1) % partitions.size();
-            skipped++;
+        while (skipped < partitions.size()) {
+            if (readAll(partitionToRead)) {
+                partitionToRead = (partitionToRead + 1) % partitions.size();
+                skipped++;
+            } else if (sCompressedbuffers[partitionToRead] >= nbuffersPerPartition) {
+                partitionToRead = (partitionToRead + 1) % partitions.size();
+            } else {
+                break;
+            }
         }
         if (skipped == partitions.size())
             break; //It means I read all possible blocks

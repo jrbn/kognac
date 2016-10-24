@@ -49,7 +49,6 @@ add_library(kognac STATIC ${kognac_SRC})
 add_executable(kognac_exec src/launcher/main.cpp)
 
 #Set compiler options
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -c -DBOOST_LOG_DYN_LINK -fPIC -std=c++11 -Wall -Wno-sign-compare")
 set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG -O3")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 set(COMPILE_FLAGS "-c -DBOOST_LOG_DYN_LINK -fPIC -std=c++11 -Wall -Wno-sign-compare")
