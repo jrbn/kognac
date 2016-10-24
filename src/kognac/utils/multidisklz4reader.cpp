@@ -91,6 +91,7 @@ void MultiDiskLZ4Reader::readbuffer(int partitionToRead,
     b.sizebuffer = sizeToBeRead;
     b.pivot = 0;
     compressedbuffers[partitionToRead].push_back(b);
+    sCompressedbuffers[partitionToRead]++;
     if (part.idxfile + 1 == part.files.size() &&
             part.positionfile == part.sizecurrentfile) {
         part.eof = true;

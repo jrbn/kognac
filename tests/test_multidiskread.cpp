@@ -3,69 +3,71 @@
 #include <condition_variable>
 
 #include <kognac/lz4io.h>
-#include <kognac/multidisklz4writer.h>
+#include <kognac/multidisklz4reader.h>
 #include <iostream>
 
 #include <boost/thread.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/log/trivial.hpp>
 
 using namespace std;
 
-void process(MultiDiskLZ4Writer *writer, int offset, int idxWriter) {
-    for (int i = 0; i < 6; ++i) {
-        writer->writeByte(idxWriter + i, 0);
-    }
+namespace fs = boost::filesystem;
 
-    long ntriples = 1000000000;
-    long count = 0;
-    for(long i = 0; i < ntriples; ++i) {
-        if (i % 20000000 == 0 && i != 0)
-            cout << "Processed " << i << endl;
-        for(int j = 0; j < 6; ++j) {
-            writer->writeLong(idxWriter + j, count++);
-            writer->writeLong(idxWriter + j, count++);
-            writer->writeLong(idxWriter + j, count++);
-        }
-    }
-
-    for(int i = 0; i < 6; ++i) {
-        writer->setTerminated(idxWriter + i);
-    }
+void readElements(int idReader, MultiDiskLZ4Reader *reader) {
+	long ntriples = 350000000;
+	long count = 0;
+	for(long i = 0; i < ntriples; ++i) {
+		long s = reader->readLong(idReader);
+		long p = reader->readLong(idReader);
+		long o = reader->readLong(idReader);
+		count++;
+		if (count % 100000000 == 0)
+			BOOST_LOG_TRIVIAL(debug) << "processed " << count;
+	}
+	BOOST_LOG_TRIVIAL(debug) << "Finished " << idReader << " " << reader;
 }
 
 int main(int argc, const char** argv) {
+    	int parallelProcesses = 72;
+    	int maxReadingThreads = 8;
+	string inputDir = string(argv[1]);
 
-    int nthreads = 72;
-    int maxReadingThreads = 4;
-    int nperms = 6;
-    string output = string(argv[1]);
-
-    std::vector<std::vector<string>> chunks;
-    chunks.resize(maxReadingThreads);
-    for (int i = 0; i < nthreads; ++i) {
-        for (int j = 0; j < nperms; ++j) {
-            string file = output + string("/") + to_string(j) + string("/chunk") + to_string(i);
-            chunks[i % maxReadingThreads].push_back(file);
+	vector<string> unsortedFiles = Utils::getFiles(inputDir);
+        MultiDiskLZ4Reader **readers = new MultiDiskLZ4Reader*[maxReadingThreads];
+        std::vector<std::vector<string>> inputsReaders(parallelProcesses);
+        int currentPart = 0;
+        for(int i = 0; i < unsortedFiles.size(); ++i) {
+            if (fs::exists(fs::path(unsortedFiles[i]))) {
+                inputsReaders[currentPart].push_back(unsortedFiles[i]);
+                currentPart = (currentPart + 1) % parallelProcesses;
+            }
         }
-    }
-    MultiDiskLZ4Writer **writers = new MultiDiskLZ4Writer*[maxReadingThreads];
-    for (int i = 0; i < maxReadingThreads; ++i) {
-        writers[i] = new MultiDiskLZ4Writer(chunks[i], 3, 3);
-    }
+        auto itr = inputsReaders.begin();
+        int filesPerReader = parallelProcesses / maxReadingThreads;
+        for(int i = 0; i < maxReadingThreads; ++i) {
+            readers[i] = new MultiDiskLZ4Reader(filesPerReader,
+                    3, 4);
+            readers[i]->start();
+            for(int j = 0; j < filesPerReader; ++j) {
+                if (itr->empty()) {
+                    BOOST_LOG_TRIVIAL(debug) << "Part " << j << " is empty";
+                } else {
+                    BOOST_LOG_TRIVIAL(debug) << "Part " << i << " " << j << " " << itr->at(0);
+                }
+                readers[i]->addInput(j, *itr);
+                itr++;
+            }
+        }
 
-    boost::thread *threads = new boost::thread[nthreads];
-    for(int i = 0; i < nthreads; ++i) {
-        MultiDiskLZ4Writer *writer = writers[i % maxReadingThreads];
-        int idxWriter = (i / maxReadingThreads) * nperms;
-        threads[i] = boost::thread(boost::bind(&process, writer, i % maxReadingThreads, idxWriter));
-    }
-
-    for (int i = 0; i < nthreads; ++i) {
-        threads[i].join();
-    }
-    delete[] threads;
-
-    for (int i = 0; i < maxReadingThreads; ++i) {
-        delete writers[i];
-    }
-    delete[] writers;
+    	boost::thread *threads = new boost::thread[parallelProcesses];
+	for (int i = 0; i < parallelProcesses; ++i) {
+		MultiDiskLZ4Reader *reader = readers[i % maxReadingThreads];
+                int idReader = i / maxReadingThreads;
+                threads[i] = boost::thread(boost::bind(&readElements, idReader, reader));
+	}
+	for (int i = 0; i < parallelProcesses; ++i) {
+                threads[i].join();
+	}
+    	delete[] threads;
 }
