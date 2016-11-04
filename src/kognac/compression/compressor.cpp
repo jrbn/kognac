@@ -838,7 +838,7 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
 
     while (!reader->isEOF(idReader)) {
         int sizeTerm = 0;
-        reader->readByte(idReader); //Ignore it. Flag should always be 0
+        int flag = reader->readByte(idReader); //Ignore it. Flag should always be 0
         assert(flag == 0);
         const char *term = reader->readString(idReader, sizeTerm);
         extractCommonTerm(term, sizeTerm, countFrequent,
