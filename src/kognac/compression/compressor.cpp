@@ -838,7 +838,7 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
 
     while (!reader->isEOF(idReader)) {
         int sizeTerm = 0;
-        int flag = reader->readByte(idReader); //Ignore it. Should always be 0
+        reader->readByte(idReader); //Ignore it. Flag should always be 0
         assert(flag == 0);
         const char *term = reader->readString(idReader, sizeTerm);
         extractCommonTerm(term, sizeTerm, countFrequent,
@@ -2905,7 +2905,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         vector<TriplePair> pairs;
         long count = 0;
         while (!reader->isEOF(idWriter)) {
-            if (sizeof(TriplePair) * pairs.size() >= maxMemory) {
+            if (sizeof(TriplePair) * pairs.size() * 2 >= maxMemory) {
                 string file = tmpfileprefix + string(".") + to_string(idx++);
                 sortAndDumpToFile2(pairs, file);
                 filesToMerge.push_back(file);
@@ -2916,17 +2916,9 @@ void Compressor::sortPartition(ParamsSortPartition params) {
             tp.readFrom(idWriter, reader);
             pairs.push_back(tp);
 
-    //First sort the input files in chunks of x elements
-    int idx = 0;
-    vector<string> filesToMerge;
-    vector<TriplePair> pairs;
-    long count = 0;
-    while (!reader->isEOF(idWriter)) {
-        if (sizeof(TriplePair) * pairs.size() * 2 >= maxMemory) {
-            string file = tmpfileprefix + string(".") + to_string(idx++);
-            sortAndDumpToFile2(pairs, file);
-            filesToMerge.push_back(file);
-            pairs.clear();
+            count++;
+            if (count % 100000000 == 0)
+                BOOST_LOG_TRIVIAL(debug) << "Loaded " << count << " Memory so far " << Utils::getUsedMemory();
         }
 
         if (filesToMerge.empty()) {
@@ -3265,19 +3257,11 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         return stringA.size() < stringB.size();
     }
 
-    BOOST_LOG_TRIVIAL(debug) << "Start threads ...";
-
-    boost::thread *threads = new boost::thread[parallelProcesses - 1];
-    const long maxMem = max((long) MIN_MEM_SORT_TRIPLES,
-                            (long) (Utils::getSystemMemory() * 0.9) / parallelProcesses);
-    for (int i = 1; i < parallelProcesses; ++i) {
-        threads[i - 1] = boost::thread(
-                             boost::bind(&Compressor::sortByTripleID,
-                                         readers[i % maxReadingThreads],
-                                         writers[i % maxReadingThreads],
-                                         i / maxReadingThreads,
-                                         kbPath + string("/listUncommonTerms-tmp") + to_string(i),
-                                         maxMem));
+    Compressor::~Compressor() {
+        if (finalMap != NULL)
+            delete finalMap;
+        if (poolForMap != NULL)
+            delete poolForMap;
     }
 
     unsigned long Compressor::calculateSizeHashmapCompression() {
