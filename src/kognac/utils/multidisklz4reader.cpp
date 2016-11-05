@@ -125,19 +125,27 @@ void MultiDiskLZ4Reader::run() {
 
         //Check whether I can get a buffer from the current file. Otherwise
         //keep looking
+        bool found = false;
+        int origPartToRead = partitionToRead;
+
         int skipped = 0;
-        while (skipped < partitions.size()) {
+        for(int i = 0; i < partitions.size(); ++i) {
             if (readAll(partitionToRead)) {
-                partitionToRead = (partitionToRead + 1) % partitions.size();
                 skipped++;
+                partitionToRead = (partitionToRead + 1) % partitions.size();
             } else if (sCompressedbuffers[partitionToRead] >= nbuffersPerPartition) {
                 partitionToRead = (partitionToRead + 1) % partitions.size();
             } else {
+                found = true;
                 break;
             }
         }
-        if (skipped == partitions.size())
-            break; //It means I read all possible blocks
+        if (skipped == partitions.size()) {
+            BOOST_LOG_TRIVIAL(debug) << "Exiting ...";
+            break;
+        } else if (!found) {
+            partitionToRead = origPartToRead;
+        }
 
         readbuffer(partitionToRead, buffer);
 
