@@ -126,7 +126,7 @@ void MultiDiskLZ4Reader::run() {
         //Check whether I can get a buffer from the current file. Otherwise
         //keep looking
         bool found = false;
-        int origPartToRead = partitionToRead;
+        int firstPotentialPart = -1;
 
         int skipped = 0;
         for(int i = 0; i < partitions.size(); ++i) {
@@ -134,6 +134,7 @@ void MultiDiskLZ4Reader::run() {
                 skipped++;
                 partitionToRead = (partitionToRead + 1) % partitions.size();
             } else if (sCompressedbuffers[partitionToRead] >= nbuffersPerPartition) {
+                firstPotentialPart = partitionToRead;
                 partitionToRead = (partitionToRead + 1) % partitions.size();
             } else {
                 found = true;
@@ -144,7 +145,11 @@ void MultiDiskLZ4Reader::run() {
             BOOST_LOG_TRIVIAL(debug) << "Exiting ...";
             break;
         } else if (!found) {
-            partitionToRead = origPartToRead;
+            if (firstPotentialPart == -1) {
+                BOOST_LOG_TRIVIAL(error) << "FirstPotentialPer == -1";
+                throw 10;
+            }
+            partitionToRead = firstPotentialPart;
         }
 
         readbuffer(partitionToRead, buffer);
