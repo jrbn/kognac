@@ -1502,9 +1502,9 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
         params.reader = readers[i % maxReadingThreads];
         params.idReader = i / maxReadingThreads;
         params.map = &commonTermsMaps[i];
-        params.dictFileName = dictFileNames[i];
+        //params.dictFileName = dictFileNames[i];
         params.idProcess = i;
-        params.singleTerms = uncommonDictFileNames[i];
+        //params.singleTerms = uncommonDictFileNames[i];
         threads[i - 1] = boost::thread(
                 boost::bind(&Compressor::extractCommonTerms, this, params));
     }
@@ -1512,9 +1512,9 @@ void Compressor::do_countmin_secondpass(const int dictPartitions,
     params.reader = readers[0];
     params.idReader = 0;
     params.map = &commonTermsMaps[0];
-    params.dictFileName = dictFileNames[0];
+    //params.dictFileName = dictFileNames[0];
     params.idProcess = 0;
-    params.singleTerms = uncommonDictFileNames[0];
+    //params.singleTerms = uncommonDictFileNames[0];
     extractCommonTerms(params);
     for (int i = 1; i < parallelProcesses; ++i) {
         threads[i - 1].join();
@@ -3039,6 +3039,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
             }
             delete[] readers;
             delete[] writers;
+		delete[] uncommonReaders;
 
             //New iteration!
             finalMap->clear();
@@ -3217,6 +3218,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
             //}
         }
         delete[] uncommonDictionaries;
+	delete[] writers;
 
         /*** Sort files by triple source ***/
         BOOST_LOG_TRIVIAL(debug) << "Sort uncommon triples by triple id";

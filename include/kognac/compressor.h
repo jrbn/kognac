@@ -74,11 +74,11 @@ struct ParamsExtractCommonTermProcedure {
     Hashtable **tables;
     GStringToNumberMap *map;
     int dictPartitions;
-    string *dictFileName;
+    //string *dictFileName;
     int maxMapSize;
     int idProcess;
     int parallelProcesses;
-    string *singleTerms;
+    //string *singleTerms;
     int thresholdForUncommon;
     bool copyHashes;
 };
@@ -584,8 +584,6 @@ private:
             string dictfile, string outputfile, int partitions,
             long &counter, int parallelProcesses, int maxReadingThreads);
 
-    static void sortPartition(ParamsSortPartition params);
-
     static void assignCountersAndPartByTripleID(long startCounter,
             DiskLZ4Reader *reader, int idReader,
             MultiDiskLZ4Writer **writers,
@@ -764,6 +762,9 @@ public:
     ~Compressor();
 
     //I make it public only for testing purposes
+
+    static void sortPartition(ParamsSortPartition params);
+
     static void sortDictionaryEntriesByText(string **input, const int ndicts,
                                             const int maxReadingThreads,
                                             const int parallelProcesses,

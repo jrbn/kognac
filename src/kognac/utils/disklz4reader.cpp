@@ -137,8 +137,10 @@ void DiskLZ4Reader::run() {
             currentFileIdx = (currentFileIdx + 1) % files.size();
             skipped++;
         }
-        if (skipped == files.size())
+        if (skipped == files.size()) {
+		diskbufferpool.push_back(buffer);
             break; //It means I read all possible blocks
+	}
         long blocknumber = readBlocks[currentFileIdx];
         assert(blocknumber < beginningBlocks[currentFileIdx].size());
         long position = beginningBlocks[currentFileIdx][blocknumber];
