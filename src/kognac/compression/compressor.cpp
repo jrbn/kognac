@@ -3119,6 +3119,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         delete[] threads;
 
         for (int i = 0; i < maxReadingThreads; ++i) {
+		delete readers[i];
             delete writers[i];
         }
         delete[] writers;
