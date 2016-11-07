@@ -26,6 +26,7 @@ void MultiDiskLZ4Reader::addInput(int id, std::vector<string> &files) {
     partitions[id].eof = files.empty();
     nsets++;
     cond_sets.notify_one();
+	cond_diskbufferpool.notify_one();
     l.unlock();
 }
 
