@@ -279,7 +279,7 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
         startb = comprb + pivot;
         pivot += compressedLen;
     } else {
-        tmpbuffer = std::unique_ptr<char[]>(new char[SIZE_SEG]);
+        tmpbuffer = std::unique_ptr<char[]>(new char[SIZE_COMPRESSED_SEG]);
         int copiedSize = sizecomprbuffer - pivot;
         memcpy(tmpbuffer.get(), comprb + pivot, copiedSize);
 
