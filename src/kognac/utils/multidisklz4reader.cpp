@@ -46,14 +46,14 @@ void MultiDiskLZ4Reader::readbuffer(int partitionToRead,
     if (!part.opened && nopenedstreams == maxopenedstreams) {
         //I must close one stream
         int lastfile = historyopenedfiles.front();
-        while (partitions[lastfile].eof) {
+        while (!partitions[lastfile].opened) {
             historyopenedfiles.pop_front();
             lastfile = historyopenedfiles.front();
         }
         historyopenedfiles.pop_front();
         assert(partitions[lastfile].opened);
-        part.stream.close();
-        part.opened = false;
+        partitions[lastfile].stream.close();
+        partitions[lastfile].opened = false;
         nopenedstreams--;
     }
     if (part.positionfile == part.sizecurrentfile) {

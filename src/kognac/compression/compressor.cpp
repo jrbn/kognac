@@ -3039,7 +3039,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
             }
             delete[] readers;
             delete[] writers;
-		delete[] uncommonReaders;
+            delete[] uncommonReaders;
 
             //New iteration!
             finalMap->clear();
@@ -3119,7 +3119,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         delete[] threads;
 
         for (int i = 0; i < maxReadingThreads; ++i) {
-		delete readers[i];
+            delete readers[i];
             delete writers[i];
         }
         delete[] writers;
@@ -3219,7 +3219,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
             //}
         }
         delete[] uncommonDictionaries;
-	delete[] writers;
+        delete[] writers;
 
         /*** Sort files by triple source ***/
         BOOST_LOG_TRIVIAL(debug) << "Sort uncommon triples by triple id";

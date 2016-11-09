@@ -39,9 +39,9 @@ void MultiMergeDiskLZ4Reader::stop() {
 void MultiMergeDiskLZ4Reader::unsetPartition(int partition) {
     std::lock_guard<std::mutex> l(m_sets);
     assert(nsets > 0);
+    assert(!partitions[partition].opened);
     partitions[partition].isset = false;
     partitions[partition].eof = false;
-    assert(!partitions[partition].opened);
     partitions[partition].opened = false;
     partitions[partition].idxfile = -1;
     partitions[partition].positionfile = 0;
