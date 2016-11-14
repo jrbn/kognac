@@ -20,3 +20,12 @@ cmake ..
 
 make
 
+==Potential problems==
+
+- The system already has a old version of Boost installed.
+
+- In this case, you can override the Boost settings by setting the variables:
+BOOST_NO_BOOST_CMAKE=TRUE
+BOOST_NO_SYSTEM_PATHS=TRUE
+BOOST_ROOT=<path to the BOOST directory>
+
