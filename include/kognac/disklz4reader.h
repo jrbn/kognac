@@ -24,6 +24,7 @@ private:
     };
 
     //Info about the files
+    const int nbuffersPerFile;
     string inputfile;
     std::vector<FileInfo> files;
     ifstream reader;

@@ -7,7 +7,7 @@
 
 namespace fs = boost::filesystem;
 
-DiskLZ4Reader::DiskLZ4Reader(int npartitions, int nbuffersPerFile) {
+DiskLZ4Reader::DiskLZ4Reader(int npartitions, int nbuffersPerFile) : nbuffersPerFile(nbuffersPerFile) {
     //Init data structures
     for (int i = 0; i < npartitions; ++i) {
         for (int j = 0; j < nbuffersPerFile; ++j)
@@ -35,7 +35,10 @@ DiskLZ4Reader::DiskLZ4Reader(int npartitions, int nbuffersPerFile) {
     }
 }
 
-DiskLZ4Reader::DiskLZ4Reader(string inputfile, int npartitions, int nbuffersPerFile) {
+DiskLZ4Reader::DiskLZ4Reader(string inputfile,
+        int npartitions,
+        int nbuffersPerFile) : nbuffersPerFile(nbuffersPerFile) {
+
     this->inputfile = inputfile;
     //Init data structures
     for (int i = 0; i < npartitions; ++i) {
@@ -129,18 +132,49 @@ void DiskLZ4Reader::run() {
         //Read the file and put the content in the disk buffer
         start = boost::chrono::system_clock::now();
 
+
+
+
         //Check whether I can get a buffer from the current file. Otherwise keep looking
+        /*int skipped = 0;
+          while (skipped < files.size() &&
+          beginningBlocks[currentFileIdx].size()
+          <= readBlocks[currentFileIdx]) {
+          currentFileIdx = (currentFileIdx + 1) % files.size();
+          skipped++;
+          }
+          if (skipped == files.size()) {
+          diskbufferpool.push_back(buffer);
+          break; //It means I read all possible blocks
+          }*/
+
+        bool found = false;
+        int firstPotentialPart = -1;
         int skipped = 0;
-        while (skipped < files.size() &&
-                beginningBlocks[currentFileIdx].size()
-                <= readBlocks[currentFileIdx]) {
-            currentFileIdx = (currentFileIdx + 1) % files.size();
-            skipped++;
+        for(int i = 0; i < files.size(); ++i) {
+            if (beginningBlocks[currentFileIdx].size() <= readBlocks[currentFileIdx]) {
+                skipped++;
+                currentFileIdx = (currentFileIdx + 1) % files.size();
+            } else if (sCompressedbuffers[currentFileIdx] >= nbuffersPerFile) {
+                firstPotentialPart = currentFileIdx;
+                currentFileIdx = (currentFileIdx + 1) % files.size();
+            } else {
+                found = true;
+                break;
+            }
         }
         if (skipped == files.size()) {
-		diskbufferpool.push_back(buffer);
-            break; //It means I read all possible blocks
-	}
+            BOOST_LOG_TRIVIAL(debug) << "Exiting ...";
+            diskbufferpool.push_back(buffer);
+            break;
+        } else if (!found) {
+            if (firstPotentialPart == -1) {
+                BOOST_LOG_TRIVIAL(error) << "FirstPotentialPer == -1";
+                throw 10;
+            }
+            currentFileIdx = firstPotentialPart;
+        }
+
         long blocknumber = readBlocks[currentFileIdx];
         assert(blocknumber < beginningBlocks[currentFileIdx].size());
         long position = beginningBlocks[currentFileIdx][blocknumber];
@@ -301,18 +335,18 @@ bool DiskLZ4Reader::uncompressBuffer(const int id) {
     lk.unlock();
 
     switch (compressionMethod) {
-    case 16:
-        //Not compressed. I just copy the buffer
-        memcpy(f.buffer, startb, uncompressedLen);
-        break;
-    case 32:
-        if (!LZ4_decompress_fast(startb, f.buffer, uncompressedLen)) {
-            BOOST_LOG_TRIVIAL(error) << "Error in the decompression.";
+        case 16:
+            //Not compressed. I just copy the buffer
+            memcpy(f.buffer, startb, uncompressedLen);
+            break;
+        case 32:
+            if (!LZ4_decompress_fast(startb, f.buffer, uncompressedLen)) {
+                BOOST_LOG_TRIVIAL(error) << "Error in the decompression.";
+                throw 10;
+            }
+            break;
+        default:
             throw 10;
-        }
-        break;
-    default:
-        throw 10;
     }
     f.sizebuffer = uncompressedLen;
     f.pivot = 0;

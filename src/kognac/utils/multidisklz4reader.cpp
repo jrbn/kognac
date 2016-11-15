@@ -26,7 +26,7 @@ void MultiDiskLZ4Reader::addInput(int id, std::vector<string> &files) {
     partitions[id].eof = files.empty();
     nsets++;
     cond_sets.notify_one();
-	cond_diskbufferpool.notify_one();
+    cond_diskbufferpool.notify_one();
     l.unlock();
 }
 
@@ -144,7 +144,7 @@ void MultiDiskLZ4Reader::run() {
         }
         if (skipped == partitions.size()) {
             BOOST_LOG_TRIVIAL(debug) << "Exiting ...";
-		diskbufferpool.push_back(buffer);
+            diskbufferpool.push_back(buffer);
             break;
         } else if (!found) {
             if (firstPotentialPart == -1) {
