@@ -1552,7 +1552,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     if (!isInputCompressed) {
         maxSize = nBytesInput / 1000;
     } else {
-        maxSize = nBytesInput / 25;
+        maxSize = nBytesInput / 100;
     }
     // Fix: maxSize = 0 for very small inputs
     if (maxSize <= 16) {
