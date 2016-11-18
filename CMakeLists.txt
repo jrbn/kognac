@@ -90,7 +90,7 @@ IF ((${lz4} STREQUAL "lz4-NOTFOUND") OR (${lz4h} STREQUAL "lz4h-NOTFOUND"))
     ExternalProject_Add(git-lz4
         DOWNLOAD_COMMAND git clone https://github.com/Cyan4973/lz4.git
         DOWNLOAD_DIR external
-        SOURCE_DIR external/lz4
+        SOURCE_DIR external/lz4/lib
         CONFIGURE_COMMAND ""
         BUILD_IN_SOURCE 1
         BUILD_COMMAND make lib MOREFLAGS=-fPIC
