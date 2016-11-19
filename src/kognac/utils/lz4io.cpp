@@ -36,8 +36,12 @@ void LZ4Writer::compressAndWriteBuffer() {
     //Then there is the compressed size but I will write it later...
     //... and finally the uncompressed size
     Utils::encode_intLE(compressedBuffer, 13, uncompressedBufferLen);
-    int compressedSize = LZ4_compress(uncompressedBuffer, compressedBuffer + 21,
-                                      uncompressedBufferLen);
+    int compressedSize = LZ4_compress_default(uncompressedBuffer, compressedBuffer + 21,
+                                      uncompressedBufferLen, SIZE_COMPRESSED_SEG - 21);
+    if (compressedSize == 0) {
+        BOOST_LOG_TRIVIAL(error) << "I could not compress in the given buffer";
+        throw 10;
+    }
     Utils::encode_intLE(compressedBuffer, 9, compressedSize);
 
     os.write(compressedBuffer, compressedSize + 21);

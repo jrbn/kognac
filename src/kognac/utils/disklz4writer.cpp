@@ -209,7 +209,11 @@ void DiskLZ4Writer::compressAndQueue(const int id) {
     //Then there is the compressed size but I will write it later...
     //... and finally the uncompressed size
     Utils::encode_intLE(buffer, 13, file.sizebuffer);
-    const int compressedSize = LZ4_compress(file.buffer, buffer + 21, file.sizebuffer);
+    const int compressedSize = LZ4_compress_default(file.buffer, buffer + 21, file.sizebuffer, SIZE_COMPRESSED_SEG - 21);
+    if (compressedSize == 0) {
+        BOOST_LOG_TRIVIAL(error) << "I could not compress in the given buffer";
+        throw 10;
+    }
     Utils::encode_intLE(buffer, 9, compressedSize);
     file.pivotCompressedBuffer += compressedSize + 21;
 }
