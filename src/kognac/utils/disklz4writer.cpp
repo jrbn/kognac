@@ -276,7 +276,7 @@ void DiskLZ4Writer::run() {
     stream.close();
 
     //write down the beginning of the blocks for each file
-    auto start = boost::chrono::system_clock::now();
+    //auto start = boost::chrono::system_clock::now();
     stream.open(inputfile + string(".idx"));
     char buffer[8];
     Utils::encode_long(buffer, startpositions.size());
@@ -293,8 +293,8 @@ void DiskLZ4Writer::run() {
         }
     }
     stream.close();
-    boost::chrono::duration<double> timeidx =
-        boost::chrono::system_clock::now() - start;
+    //boost::chrono::duration<double> timeidx =
+    //    boost::chrono::system_clock::now() - start;
     //BOOST_LOG_TRIVIAL(debug) << "Time writing the idx file is " << timeidx.count() << "sec.";
 }
 

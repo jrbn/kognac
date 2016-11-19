@@ -676,25 +676,25 @@ void Compressor::extractCommonTerm(const char* term, const int sizeTerm,
         std::vector<std::pair<string, long> >,
         priorityQueueOrder> &queue) {
     long v1, v2, v3;
-    bool v2Checked = false;
-    bool v3Checked = false;
+    //bool v2Checked = false;
+    //bool v3Checked = false;
 
     bool valueHighEnough = false;
-    bool termInfrequent = false;
+    //bool termInfrequent = false;
     v1 = table1->get(term + 2, sizeTerm - 2);
     long minValue = -1;
     if (v1 < thresholdForUncommon) {
-        termInfrequent = true;
+        //termInfrequent = true;
     } else {
         v2 = table2->get(term + 2, sizeTerm - 2);
-        v2Checked = true;
+        //v2Checked = true;
         if (v2 < thresholdForUncommon) {
-            termInfrequent = true;
+            //termInfrequent = true;
         } else {
             v3 = table3->get(term + 2, sizeTerm - 2);
-            v3Checked = true;
+            //v3Checked = true;
             if (v3 < thresholdForUncommon) {
-                termInfrequent = true;
+                //termInfrequent = true;
             } else {
                 minValue = min(v1, min(v2, v3));
                 valueHighEnough = minValue > minValueToBeAdded;
@@ -838,8 +838,8 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
 
     while (!reader->isEOF(idReader)) {
         int sizeTerm = 0;
-        int flag = reader->readByte(idReader); //Ignore it. Flag should always be 0
-        assert(flag == 0);
+        reader->readByte(idReader); //Ignore it. Flag should always be 0
+        //assert(flag == 0);
         const char *term = reader->readString(idReader, sizeTerm);
         extractCommonTerm(term, sizeTerm, countFrequent,
                 thresholdForUncommon, table1, table2, table3,
@@ -1012,7 +1012,10 @@ void Compressor::newCompressTriples(ParamsNewCompressProcedure params) {
                             compressedTerms++;
                         }
                     }
-                    assert(ok);
+
+                    if (!ok) {
+                        throw 10;
+                    }
                 }
             }
         }

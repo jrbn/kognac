@@ -182,8 +182,10 @@ void DiskLZ4Reader::run() {
 
         reader.seekg(position);
         reader.read(tmpbuffer, 4);
+#ifdef DEBUG
         int fileidx = Utils::decode_int(tmpbuffer);
         assert(fileidx == currentFileIdx);
+#endif
         reader.read(tmpbuffer, 4);
         size_t sizeToBeRead = Utils::decode_int(tmpbuffer);
         totalsize += sizeToBeRead + 8;
@@ -363,8 +365,7 @@ bool DiskLZ4Reader::isEOF(const int id) {
 int DiskLZ4Reader::readByte(const int id) {
     assert(id < files.size());
     if (files[id].pivot >= files[id].sizebuffer) {
-        bool resp = uncompressBuffer(id);
-        assert(resp);
+        uncompressBuffer(id);
     }
     return files[id].buffer[files[id].pivot++];
 }
@@ -378,8 +379,12 @@ long DiskLZ4Reader::readLong(const int id) {
         char header[8];
         int copiedBytes = files[id].sizebuffer - files[id].pivot;
         memcpy(header, files[id].buffer + files[id].pivot, copiedBytes);
+#ifdef DEBUG
         bool resp = uncompressBuffer(id);
         assert(resp);
+#else
+        uncompressBuffer(id);
+#endif
         memcpy(header + copiedBytes, files[id].buffer, 8 - copiedBytes);
         files[id].pivot = 8 - copiedBytes;
         return Utils::decode_long(header);
@@ -407,8 +412,12 @@ const char *DiskLZ4Reader::readString(const int id, int &size) {
     } else {
         int remSize = files[id].sizebuffer - files[id].pivot;
         memcpy(supportstringbuffers[id].get(), files[id].buffer + files[id].pivot, remSize);
+#ifdef DEBUG
         bool resp = uncompressBuffer(id);
         assert(resp);
+#else
+        uncompressBuffer(id);
+#endif
         memcpy(supportstringbuffers[id].get() + remSize, files[id].buffer , size - remSize);
         files[id].pivot += size - remSize;
     }
