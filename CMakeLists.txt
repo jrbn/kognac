@@ -93,7 +93,7 @@ IF ((${lz4} STREQUAL "lz4-NOTFOUND") OR (${lz4h} STREQUAL "lz4h-NOTFOUND"))
         SOURCE_DIR external/lz4/
         CONFIGURE_COMMAND ""
         BUILD_IN_SOURCE 1
-        BUILD_COMMAND cd lib; make lib MOREFLAGS=-fPIC
+        BUILD_COMMAND make -C lib MOREFLAGS=-fPIC
         INSTALL_COMMAND ""
     )
     ExternalProject_Get_Property(git-lz4 SOURCE_DIR)
