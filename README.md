@@ -16,7 +16,7 @@ cd build
 
 cmake ..
 
-(If you want to build the DEBUG version of the library, add the parameter: -D CMAKE_BUILD_TYPE=Debug. e.g. cmake -D CMAKE_BUILD_TYPE=Debug ..)
+(If you want to build the DEBUG version of the library, add the parameter: -DCMAKE_BUILD_TYPE=Debug. e.g. cmake -DCMAKE_BUILD_TYPE=Debug ..)
 
 make
 
