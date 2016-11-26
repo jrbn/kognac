@@ -828,7 +828,7 @@ void Compressor::extractCommonTerms(ParamsExtractCommonTermProcedure params) {
         int sizeTerm = 0;
         reader->readByte(idReader); //Ignore it. Flag should always be 0
         const char *term = reader->readString(idReader, sizeTerm);
-        if (!ignorePredicates || pos != 2) {
+        if (!ignorePredicates || pos != 1) {
             extractCommonTerm(term, sizeTerm, countFrequent,
                     thresholdForUncommon, table1, table2, table3,
                     dictPartitions, minValueToBeAdded,
