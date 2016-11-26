@@ -74,13 +74,12 @@ struct ParamsExtractCommonTermProcedure {
     Hashtable **tables;
     GStringToNumberMap *map;
     int dictPartitions;
-    //string *dictFileName;
     int maxMapSize;
     int idProcess;
     int parallelProcesses;
-    //string *singleTerms;
     int thresholdForUncommon;
     bool copyHashes;
+    bool ignorePredicates;
 };
 
 struct ParamsNewCompressProcedure {
@@ -90,6 +89,7 @@ struct ParamsNewCompressProcedure {
     int parallelProcesses;
     DiskLZ4Reader *reader;
     int idReader;
+    bool ignorePredicates;
     ByteArrayToNumberMap *commonMap;
     DiskLZ4Reader *readerUncommonTerms;
 
@@ -108,6 +108,7 @@ struct ParamsUncompressTriples {
     long *distinctValues;
     std::vector<string> *resultsMGS;
     size_t sizeHeap;
+    bool ignorePredicates;
 };
 
 struct ParamsSortPartition {
@@ -538,7 +539,8 @@ private:
                      const int parallelProcesses, const int maxReadingThreads,
                      const bool copyHashes, SchemaExtractor *extractors,
                      vector<FileInfo> *files,
-                     GStringToNumberMap *commonTermsMaps, bool usemisgra);
+                     GStringToNumberMap *commonTermsMaps, bool usemisgra,
+                     bool ignorePredicates);
 
     void do_countmin_secondpass(const int dictPartitions,
                                 const int sampleArg,
@@ -550,7 +552,8 @@ private:
                                 Hashtable **tables2,
                                 Hashtable **tables3,
                                 long *distinctValues,
-                                GStringToNumberMap *commonTermsMaps);
+                                GStringToNumberMap *commonTermsMaps,
+                                bool ignorePredicates);
 
     unsigned int getThresholdForUncommon(
         const int parallelProcesses,
@@ -591,8 +594,6 @@ private:
             int parallelProcesses,
             int maxReadingThreads);
 
-    //static void sampleTuples(string input, std::vector<string> *output);
-
 protected:
     static bool isSplittable(string path);
 
@@ -629,7 +630,6 @@ protected:
                              ByteArrayToNumberMap * map,
                              const int idwriter,
                              DiskLZ4Writer *writer,
-                             //LZ4Writer **udictFile,
                              const long tripleId,
                              const int pos,
                              const int dictPartitions,
@@ -651,8 +651,7 @@ protected:
                               const bool copyHashes, const int idProcess,
                               const int parallelProcesses,
                               DiskLZ4Writer *writer,
-                              //string * udictFileName,
-                              const bool splitUncommonByHash);
+                              const bool ignorePredicates);
 
     void mergeCommonTermsMaps(ByteArrayToNumberMap * finalMap,
                               GStringToNumberMap * maps, int nmaps);
@@ -719,23 +718,23 @@ public:
 
     static vector<FileInfo> *splitInputInChunks(const string & input, int nchunks);
 
-    void parse(int dictPartitions, int sampleMethod, int sampleArg, int sampleArg2,
+    /*void parse(int dictPartitions, int sampleMethod, int sampleArg, int sampleArg2,
                int parallelProcesses, int maxReadingThreads, bool copyHashes,
                SchemaExtractor * extractor, const bool splitUncommonByHash) {
         parse(dictPartitions, sampleMethod, sampleArg, sampleArg2,
               parallelProcesses, maxReadingThreads, copyHashes, extractor,
-              splitUncommonByHash, false);
-    }
+              splitUncommonByHash, false, false);
+    }*/
 
     void parse(int dictPartitions, int sampleMethod, int sampleArg, int sampleArg2,
                int parallelProcesses, int maxReadingThreads, bool copyHashes,
-               SchemaExtractor * extractor, const bool splitUncommonByHash,
-               bool onlySample);
+               SchemaExtractor * extractor, bool onlySample, bool ignorePredicates);
 
     virtual void compress(string * permDirs, int nperms, int signaturePerms,
                           string * dictionaries, int ndicts,
                           int parallelProcesses,
-                          int maxReadingThreads);
+                          int maxReadingThreads,
+                          const bool ignorePredicates);
 
     string **dictFileNames;
     string **uncommonDictFileNames;
@@ -769,7 +768,6 @@ public:
                                             const int maxReadingThreads,
                                             const int parallelProcesses,
                                             string * prefixOutputFiles,
-                                            //int *noutputfiles,
                                             ByteArrayToNumberMap * map,
                                             bool filterDuplicates,
                                             bool sample);
@@ -788,7 +786,9 @@ public:
                          int nperms, int signaturePerms,
                          vector<string> &notSoUncommonFiles,
                          vector<string> &finalUncommonFiles, string * tmpFileNames,
-                         StringCollection * poolForMap, ByteArrayToNumberMap * finalMap);
+                         StringCollection * poolForMap,
+                         ByteArrayToNumberMap * finalMap,
+                         const bool ignorePredicates);
 
     static void newCompressTriples(ParamsNewCompressProcedure params);
 };

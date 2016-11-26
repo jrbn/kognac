@@ -43,7 +43,7 @@ void Kognac::sample(const int sampleMethod, const int sampleArg1,
                     const int maxConcurrentThreads) {
     //1- Sample the graph
     compr->parse(1, sampleMethod, sampleArg1, sampleArg2, parallelThreads,
-                 maxConcurrentThreads, true, &extractor, false, true);
+                 maxConcurrentThreads, true, &extractor, true, false);
 
     //2- Store in the internal list the most frequent terms
     for (ByteArrayToNumberMap::iterator itr = compr->finalMap->begin();
