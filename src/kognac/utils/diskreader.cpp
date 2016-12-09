@@ -4,12 +4,14 @@ DiskReader::DiskReader(int nbuffers, std::vector<FileInfo> *files) {
     this->files = files;
     itr = files->begin();
     finished = false;
-    size_t maxsize = 0;
+    maxsize = 0;
     for (int i = 0; i < files->size(); ++i) {
         if (files->at(i).size > maxsize)
             maxsize = files->at(i).size;
     }
+    maxsize += 32 * 1024 + maxsize * 0.1; //min size + add a 10%
 
+    BOOST_LOG_TRIVIAL(debug) << "Max size=" << maxsize;
     for (int i = 0; i < nbuffers; ++i) {
         availablebuffers.push_back(new char[maxsize]);
         memset(availablebuffers.back(), 0, sizeof(char) * maxsize);
@@ -38,7 +40,6 @@ char *DiskReader::getfile(size_t &size, bool &gzipped) {
     }
 
     lk.unlock();
-    //Tell another waiting thread that there might be jobs for them
     cv1.notify_one();
 
     if (gotit) {
@@ -77,20 +78,38 @@ void DiskReader::run() {
         }
 
         //Read a file and copy it in buffer
-        //BOOST_LOG_TRIVIAL(debug) << "Reading file " << itr->path << " remaining files " << (files->size() - count) << " waiting time " << waitingTime.count() << "sec.";
         ifs.open(itr->path);
-        assert(itr->start == 0);
-        ifs.read(buffer, itr->size);
+        long readSize = itr->size;
+        if (itr->start > 0) {
+            ifs.seekg(itr->start);
+            while (!ifs.eof() && ifs.get() != '\n') {
+                readSize--;
+            };
+            readSize--;
+        }
+        ifs.read(buffer, readSize);
         assert(ifs);
+        //Keep reading until the final '\n'
+        while (!ifs.eof()) {
+            char b = ifs.get();
+            if (b == -1) {
+                break; //magic value
+            }
+            if (readSize > maxsize) {
+                BOOST_LOG_TRIVIAL(error) << "Buffers are too small. Must fix this";
+                throw 10;
+            }
+            buffer[readSize++] = b;
+            if (b == '\n')
+                break;
+        };
         ifs.close();
         count++;
-
-
         {
             std::lock_guard<std::mutex> lk(mutex1);
             Buffer newbuffer;
             newbuffer.b = buffer;
-            newbuffer.size = itr->size;
+            newbuffer.size = readSize;
             fs::path p(itr->path);
             if (p.has_extension() && p.extension() == string(".gz")) {
                 newbuffer.gzipped = true;

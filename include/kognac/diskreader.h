@@ -36,6 +36,8 @@ private:
 
     boost::chrono::duration<double> waitingTime;
 
+    long maxsize;
+
 public:
     DiskReader(int nbuffers, std::vector<FileInfo> *files);
 

@@ -1551,10 +1551,8 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     } else {
         maxSize = nBytesInput / 100;
     }
-    // Fixed: maxSize = 0 for very small inputs
-    if (maxSize <= 16) {
-        maxSize = 16;
-    }
+    // Fixed: maxSize for very small inputs
+    maxSize = std::max((long)sampleArg, maxSize);
     BOOST_LOG_TRIVIAL(debug) << "Size Input: " << nBytesInput <<
         " bytes. Max table size=" << maxSize;
     long memForHashTables = (long)(Utils::getSystemMemory() * 0.5)
@@ -1563,6 +1561,7 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     const unsigned int sizeHashTable = std::min((long)maxSize,
             (long)std::max((unsigned int)1000000,
                 (unsigned int)(memForHashTables / sizeof(long))));
+
     BOOST_LOG_TRIVIAL(debug) << "Size hash table " << sizeHashTable;
 
     if (parallelProcesses % maxReadingThreads != 0) {
@@ -2097,29 +2096,11 @@ bool _sampleLess(const std::pair<const char *, int> &c1,
 
 std::vector<string> Compressor::getPartitionBoundaries(const string kbdir,
         const int partitions) {
-    /*//Sample the elements
-      std::vector<std::vector<string>> samples(inputFiles.size());
-      std::vector<boost::thread> threads(inputFiles.size());
-      for (int i = 0; i < inputFiles.size(); ++i) {
-      threads[i] = boost::thread(boost::bind(&Compressor::sampleTuples, inputFiles[i],
-      &samples[i]));
-      }
-      for (int i = 0; i < threads.size(); ++i) {
-      threads[i].join();
-      }
-
-    //Contains all strings
-    std::vector<string> sample;
-    for (auto s = samples.begin(); s != samples.end(); ++s) {
-    std::copy(s->begin(), s->end(), std::back_inserter(sample));
-    }
-    assert(sample.size() >= partitions);
-    std::sort(sample.begin(), sample.end());*/
-
     //Read all sample strings
     std::vector<std::pair<const char *, int>> sample;
     StringCollection col(10 * 1024 * 1024);
     fs::directory_iterator end;
+
     for (fs::directory_iterator dir_iter(kbdir); dir_iter != end;
             ++dir_iter) {
         if (boost::ends_with(dir_iter->path().filename().string(), "-sample")) {
@@ -2134,8 +2115,23 @@ std::vector<string> Compressor::getPartitionBoundaries(const string kbdir,
                 }
             }
             fs::remove(dir_iter->path().string());
-        }
+        }/* else if (sample.empty() &&
+                dir_iter->path().filename().string() == "dict-0-u.0") {
+            //Read one triple
+            LZ4Reader r(dir_iter->path().string());
+            while (!r.isEof()) {
+                int size;
+                const char *s = r.parseString(size);
+                const char *news = col.addNew(s, size);
+                sample.push_back(std::make_pair(news, size));
+            }
+        }*/
     }
+
+    /*if (sample.empty()) {
+        BOOST_LOG_TRIVIAL(error) << "Sample should not be empty!";
+        throw 10;
+    }*/
 
     //Sort the sample
     std::sort(sample.begin(), sample.end(), &_sampleLess);
@@ -2143,9 +2139,8 @@ std::vector<string> Compressor::getPartitionBoundaries(const string kbdir,
     std::vector<string> output;
     size_t sizePartition = sample.size() / partitions;
     BOOST_LOG_TRIVIAL(debug) << "sample.size()=" << sample.size()
-        <<  " sizePartition=" << sizePartition
+        << " sizePartition=" << sizePartition
         << " remainder=" << (sample.size() % partitions);
-    //sizePartition = sizePartition * (partitions + 1) / partitions;
     for (size_t i = 0; i < sample.size(); ++i) {
         if ((i + 1) % sizePartition == 0 && output.size() < partitions - 1) {
             //Add element in the partition
@@ -2273,7 +2268,6 @@ void Compressor::sortPartition(ParamsSortPartition params) {
     string prefixInputFiles = params.prefixInputFiles;
     MultiDiskLZ4Reader *reader = params.reader;
     MultiMergeDiskLZ4Reader *mergerReader = params.mergerReader;
-    //string dictfile = params.dictfile;
     DiskLZ4Writer *dictWriter = params.dictWriter;
     const int idDictWriter = params.idDictWriter;
     DiskLZ4Writer *writer = params.writer;
@@ -2865,7 +2859,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         fs::path p = fs::path(prefixInputFile).parent_path();
         const std::vector<string> boundaries = getPartitionBoundaries(p.string(),
                 parallelProcesses);
-        assert(boundaries.size() == parallelProcesses - 1);
+        assert(boundaries.size() <= parallelProcesses - 1);
 
         //Range-partitions all the files in the input collection
         BOOST_LOG_TRIVIAL(debug) << "Range-partitions the files...";
@@ -2877,7 +2871,7 @@ void Compressor::sortPartition(ParamsSortPartition params) {
         sortPartitionsAndAssignCounters(prefixInputFile,
                 dictOutput,
                 outputFile2,
-                boundaries.size() + 1,
+                parallelProcesses,
                 *startCounter, parallelProcesses,
                 maxReadingThreads);
     }
