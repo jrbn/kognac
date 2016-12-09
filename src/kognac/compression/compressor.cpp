@@ -1117,7 +1117,7 @@ vector<FileInfo> *Compressor::splitInputInChunks(const string &input, int nchunk
 
     /*** Sort the input files by size, and split the files through the multiple processors ***/
     std::sort(infoAllFiles.begin(), infoAllFiles.end(), cmpInfoFiles);
-    vector<FileInfo> *files = new vector<FileInfo> [nchunks];
+    vector<FileInfo> *files = new vector<FileInfo>[nchunks];
     long splitTargetSize = totalSize / nchunks;
     int processedFiles = 0;
     int currentSplit = 0;
@@ -1326,7 +1326,14 @@ void Compressor::parse(int dictPartitions, int sampleMethod, int sampleArg,
         bool ignorePredicates) {
 
     tmpFileNames = new string[parallelProcesses];
-    vector<FileInfo> *files = splitInputInChunks(input, maxReadingThreads);
+    vector<FileInfo> *files = splitInputInChunks(input, parallelProcesses);
+    int j = 0;
+    for(int i = maxReadingThreads; i < parallelProcesses; ++i) {
+        for(auto el : files[i])
+            files[j].push_back(el);
+        files[i].clear();
+        j = (j + 1) % maxReadingThreads;
+    }
 
     /*** Set name dictionary files ***/
     dictFileNames = new string*[maxReadingThreads];
@@ -1578,7 +1585,8 @@ void Compressor::do_countmin(const int dictPartitions, const int sampleArg,
     boost::thread *threadReaders = new boost::thread[maxReadingThreads];
     DiskLZ4Writer **writers = new DiskLZ4Writer*[maxReadingThreads];
     for (int i = 0; i < maxReadingThreads; ++i) {
-        readers[i] = new DiskReader(max(2, (int)(parallelProcesses / maxReadingThreads) * 2), &files[i]);
+        readers[i] = new DiskReader(max(2,
+                    (int)(parallelProcesses / maxReadingThreads) * 2), &files[i]);
         threadReaders[i] = boost::thread(boost::bind(&DiskReader::run, readers[i]));
         writers[i] = new DiskLZ4Writer(tmpFileNames[i], parallelProcesses / maxReadingThreads, 3);
     }
@@ -2116,22 +2124,22 @@ std::vector<string> Compressor::getPartitionBoundaries(const string kbdir,
             }
             fs::remove(dir_iter->path().string());
         }/* else if (sample.empty() &&
-                dir_iter->path().filename().string() == "dict-0-u.0") {
-            //Read one triple
-            LZ4Reader r(dir_iter->path().string());
-            while (!r.isEof()) {
-                int size;
-                const char *s = r.parseString(size);
-                const char *news = col.addNew(s, size);
-                sample.push_back(std::make_pair(news, size));
-            }
+            dir_iter->path().filename().string() == "dict-0-u.0") {
+        //Read one triple
+        LZ4Reader r(dir_iter->path().string());
+        while (!r.isEof()) {
+        int size;
+        const char *s = r.parseString(size);
+        const char *news = col.addNew(s, size);
+        sample.push_back(std::make_pair(news, size));
+        }
         }*/
     }
 
     /*if (sample.empty()) {
-        BOOST_LOG_TRIVIAL(error) << "Sample should not be empty!";
-        throw 10;
-    }*/
+      BOOST_LOG_TRIVIAL(error) << "Sample should not be empty!";
+      throw 10;
+      }*/
 
     //Sort the sample
     std::sort(sample.begin(), sample.end(), &_sampleLess);
