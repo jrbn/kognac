@@ -87,22 +87,27 @@ void DiskReader::run() {
             };
             readSize--;
         }
-        ifs.read(buffer, readSize);
-        assert(ifs);
-        //Keep reading until the final '\n'
-        while (!ifs.eof()) {
-            char b = ifs.get();
-            if (b == -1) {
-                break; //magic value
-            }
-            if (readSize > maxsize) {
-                BOOST_LOG_TRIVIAL(error) << "Buffers are too small. Must fix this";
-                throw 10;
-            }
-            buffer[readSize++] = b;
-            if (b == '\n')
-                break;
-        };
+        if (readSize <= 0) {
+            //No line was found within the allocated chunk
+            readSize = 0;
+        } else {
+            ifs.read(buffer, readSize);
+            assert(ifs);
+            //Keep reading until the final '\n'
+            while (!ifs.eof()) {
+                char b = ifs.get();
+                if (b == -1) {
+                    break; //magic value
+                }
+                if (readSize > maxsize) {
+                    BOOST_LOG_TRIVIAL(error) << "Buffers are too small. Must fix this";
+                    throw 10;
+                }
+                buffer[readSize++] = b;
+                if (b == '\n')
+                    break;
+            };
+        }
         ifs.close();
         count++;
         {
