@@ -716,7 +716,7 @@ public:
 
     unsigned long getEstimatedFrequency(const string & el) const;
 
-    static vector<FileInfo> *splitInputInChunks(const string & input, int nchunks);
+    static vector<FileInfo> *splitInputInChunks(const string & input, int nchunks, string prefix = "");
 
     /*void parse(int dictPartitions, int sampleMethod, int sampleArg, int sampleArg2,
                int parallelProcesses, int maxReadingThreads, bool copyHashes,

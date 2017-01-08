@@ -1082,7 +1082,7 @@ bool Compressor::isSplittable(string path) {
     }
 }
 
-vector<FileInfo> *Compressor::splitInputInChunks(const string &input, int nchunks) {
+vector<FileInfo> *Compressor::splitInputInChunks(const string &input, int nchunks, string prefix) {
     /*** Get list all files ***/
     fs::path pInput(input);
     vector<FileInfo> infoAllFiles;
@@ -1091,7 +1091,9 @@ vector<FileInfo> *Compressor::splitInputInChunks(const string &input, int nchunk
         fs::directory_iterator end;
         for (fs::directory_iterator dir_iter(input); dir_iter != end;
                 ++dir_iter) {
-            if (dir_iter->path().filename().string()[0] != '.') {
+            if (dir_iter->path().filename().string()[0] != '.' &&
+                    (prefix == "" ||
+                     boost::starts_with(dir_iter->path().filename().string(), prefix))) {
                 long fileSize = fs::file_size(dir_iter->path());
                 totalSize += fileSize;
                 FileInfo i;
