@@ -120,6 +120,7 @@ public:
 
     static long decode_vlong(char* buffer, int *offset);
     static int encode_vlong(char* buffer, int offset, long n);
+    static uint16_t encode_vlong(char* buffer, long n);
     static int numBytes(long number);
 
     static int numBytesFixedLength(long number);
@@ -134,6 +135,7 @@ public:
 
     static void encode_vlong2_fixedLen(char* buffer, long n, const uint8_t len);
     static int encode_vlong2(char* buffer, int offset, long n);
+    static uint16_t encode_vlong2(char* buffer, long n);
     static int numBytes2(long number);
 
     static long decode_vlongWithHeader0(char* buffer, const int end, int *pos);

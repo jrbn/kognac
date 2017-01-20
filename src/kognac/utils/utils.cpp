@@ -437,6 +437,17 @@ int Utils::encode_vlong(char* buffer, int offset, long n) {
     return offset;
 }
 
+uint16_t Utils::encode_vlong(char* buffer, long n) {
+    int nbytes = numBytes(n);
+    int offset = 0;
+    buffer[offset++] = (((nbytes - 1) << 5) + ((int) n & 31));
+    n >>= 5;
+    for (int i = 1; i < nbytes; i++) {
+        buffer[offset++] = ((int) n & 255);
+        n >>= 8;
+    }
+    return nbytes;
+}
 //short Utils::decode_vshort(char* buffer, int *offset) {
 //  char n = buffer[(*offset)++];
 //  if (n < 0) {
@@ -510,6 +521,28 @@ int Utils::encode_vlong2(char* buffer, int offset, long n) {
         buffer[offset++] = n & 127;
     }
     return offset;
+}
+
+uint16_t Utils::encode_vlong2(char* buffer, long n) {
+    if (n < 0) {
+        BOOST_LOG_TRIVIAL(error) << "Number is negative. This is not allowed with vlong2";
+        throw 10;
+    }
+
+    if (n < 128) { // One byte is enough
+        buffer[0] = n;
+        return 1;
+    } else {
+        int bytesToStore = 64 - numberOfLeadingZeros((unsigned long)n);
+        uint16_t offset = 0;
+        while (bytesToStore > 7) {
+            buffer[offset++] = ((n & 127) + 128);
+            n >>= 7;
+            bytesToStore -= 7;
+        }
+        buffer[offset++] = n & 127;
+        return offset;
+    }
 }
 
 void Utils::encode_vlong2_fixedLen(char* buffer, long n, const uint8_t len) {
