@@ -56,39 +56,56 @@ class FileMerger {
         int nfiles;
         int nextFileToRead;
         long elementsRead;
-        std::vector<int> extensions;
+        std::vector<int> extensions; //mark the current extension
         std::vector<string> input;
 
-        FileMerger() {}
+        FileMerger() : deletePreviousExt(false) {}
+
+    private:
+        const bool deletePreviousExt;
+
+        //Changes LZ4Reader **files
+        int loadFileWithExtension(string prefix, int part, int ext) {
+            string filename = prefix + "." + to_string(ext);
+            if (fs::exists(filename)) {
+                files[part] = new LZ4Reader(filename);
+                return ext;
+            } else {
+                return -1;
+            }
+        }
 
     public:
-        FileMerger(vector<string> fn, bool considerExtensions = false) {
-            //Open the files
-            files = new LZ4Reader*[fn.size()];
-            nfiles = fn.size();
-            elementsRead = 0;
-            this->input = fn;
+        FileMerger(vector<string> fn,
+                bool considerExtensions = false,
+                bool deletePreviousExt = false) :
+            deletePreviousExt(deletePreviousExt) {
+                //Open the files
+                files = new LZ4Reader*[fn.size()];
+                nfiles = fn.size();
+                elementsRead = 0;
+                this->input = fn;
 
-            for (int i = 0; i < fn.size(); ++i) {
-                if (considerExtensions) {
-                    files[i] = new LZ4Reader(fn[i] + ".0");
-                    extensions.push_back(1);
-                } else {
-                    files[i] = new LZ4Reader(fn[i]);
-                    extensions.push_back(-1);
-                }
+                for (int i = 0; i < fn.size(); ++i) {
+                    if (considerExtensions) {
+                        const int loadedExt = loadFileWithExtension(fn[i], i, 0);
+                        extensions.push_back(loadedExt);
+                    } else {
+                        files[i] = new LZ4Reader(fn[i]);
+                        extensions.push_back(-1);
+                    }
 
-                //Read the first element and put it in the queue
-                if (!files[i]->isEof()) {
-                    QueueEl<K> el;
-                    el.key.readFrom(files[i]);
-                    el.fileIdx = i;
-                    queue.push(el);
-                    elementsRead++;
+                    //Read the first element and put it in the queue
+                    if (!files[i]->isEof()) {
+                        QueueEl<K> el;
+                        el.key.readFrom(files[i]);
+                        el.fileIdx = i;
+                        queue.push(el);
+                        elementsRead++;
+                    }
                 }
+                nextFileToRead = -1;
             }
-            nextFileToRead = -1;
-        }
 
         bool isEmpty() {
             return queue.empty() && nextFileToRead == -1;
@@ -113,21 +130,25 @@ class FileMerger {
                 nextFileToRead = el.fileIdx;
             } else {
                 if (extensions[el.fileIdx] != -1) {
-                    //Check if the file exists
                     while (true) {
-                        string nextFile = input[el.fileIdx] + "." + to_string(extensions[el.fileIdx]);
-                        if (fs::exists(fs::path(nextFile))) {
-                            delete files[el.fileIdx];
-                            files[el.fileIdx] = new LZ4Reader(nextFile);
-                            extensions[el.fileIdx]++;
+                        const int currentExt = extensions[el.fileIdx];
+                        delete files[el.fileIdx];
+                        if (deletePreviousExt) {
+                            string filename = input[el.fileIdx] + "." + to_string(currentExt);
+                            fs::remove(filename);
+                        }
+                        const int nextExt = loadFileWithExtension(input[el.fileIdx], el.fileIdx, currentExt + 1);
+                        if (nextExt == -1) {
+                            nextFileToRead = -1;
+                            extensions[el.fileIdx] = -1;
+                            files[el.fileIdx] = NULL;
+                            break;
+                        } else {
                             nextFileToRead = el.fileIdx;
+                            extensions[el.fileIdx] = nextExt;
                             if (!files[el.fileIdx]->isEof()) {
                                 break;
                             }
-                        } else {
-                            nextFileToRead = -1;
-                            extensions[el.fileIdx] = -1;
-                            break;
                         }
                     }
                 } else {
@@ -140,7 +161,13 @@ class FileMerger {
 
         virtual ~FileMerger() {
             for (int i = 0; i < nfiles; ++i) {
-                delete files[i];
+                if (files[i]) {
+                    delete files[i];
+                    if (deletePreviousExt) {
+                        string filename = input[i] + "." + to_string(extensions[i]);
+                        fs::remove(filename);
+                    }
+                }
             }
             if (files != NULL)
                 delete[] files;
