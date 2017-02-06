@@ -209,8 +209,13 @@ void DiskLZ4Writer::compressAndQueue(const int id) {
     //Then there is the compressed size but I will write it later...
     //... and finally the uncompressed size
     Utils::encode_intLE(buffer, 13, file.sizebuffer);
+#if LZ4_VERSION_MAJOR > 1 || LZ4_VERSION_MINOR > 2 || (LZ4_VERSION_MINOR == 2 && LZ4_VERSION_RELEASE >= 9)
+    // LZ4_compress_default does not exist before lz4 version 129.
     const int compressedSize = LZ4_compress_default(file.buffer, buffer + 21, file.sizebuffer, SIZE_COMPRESSED_SEG - 21);
-    if (compressedSize == 0) {
+#else
+    const int compressedSize = LZ4_compress(file.buffer, buffer + 21, file.sizebuffer);
+#endif
+    if (compressedSize == 0 || compressedSize > SIZE_COMPRESSED_SEG - 21) {
         BOOST_LOG_TRIVIAL(error) << "I could not compress in the given buffer";
         throw 10;
     }

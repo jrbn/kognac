@@ -36,9 +36,15 @@ void LZ4Writer::compressAndWriteBuffer() {
     //Then there is the compressed size but I will write it later...
     //... and finally the uncompressed size
     Utils::encode_intLE(compressedBuffer, 13, uncompressedBufferLen);
+#if LZ4_VERSION_MAJOR > 1 || LZ4_VERSION_MINOR > 2 || (LZ4_VERSION_MINOR == 2 && LZ4_VERSION_RELEASE >= 9)
+    // LZ4_compress_default does not exist before lz4 version 129.
     int compressedSize = LZ4_compress_default(uncompressedBuffer, compressedBuffer + 21,
                                       uncompressedBufferLen, SIZE_COMPRESSED_SEG - 21);
-    if (compressedSize == 0) {
+#else
+    int compressedSize = LZ4_compress(uncompressedBuffer, compressedBuffer + 21,
+                                      uncompressedBufferLen);
+#endif
+    if (compressedSize == 0 || compressedSize > SIZE_COMPRESSED_SEG - 21) {
         BOOST_LOG_TRIVIAL(error) << "I could not compress in the given buffer";
         throw 10;
     }
